@@ -1,4 +1,4 @@
-import WOMC_V2_parallel
+import WOMC_V2
 
 if __name__ == "__main__":
 
@@ -14,9 +14,9 @@ if __name__ == "__main__":
     epoch_f = 100, # INT -> quantidade de épocas no reticulado das funções booleanas (janela fixa)
     epoch_w = 20, # INT -> quantidade de épocas no reticulado das janelas
     batch = 1, # INT -> qtd de imagens de treino utilizada
-    path_results = 'results_V6', # STR -> pasta para ser salvo os resultados das imagens
-    name_save='_V6', # STR -> final a ser salvo nos arquivos (W, joint, W_hist)
-    seed = 0, #INT -> seed para aleatórios (garantir reproducibilidade)
+    path_results = 'results_V1', # STR -> pasta para ser salvo os resultados das imagens
+    name_save='_V1', # STR -> final a ser salvo nos arquivos (W, joint, W_hist)
+    seed = 0, #INT -> seed para aleatórios (garantir reprodutibilidade )
     parallel = True # True/False -> utilizar função paralela (True) ou sequencial (False)
     )
 

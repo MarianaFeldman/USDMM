@@ -2,7 +2,7 @@ import WOMC_V2
 
 if __name__ == "__main__":
 
-    WOMC = WOMC_V2_parallel.WOMC(
+    WOMC = WOMC_V2.WOMC(
     new = True, # True/False -> inicializar aleatório ou inicializar de um arquivo
     nlayer = 2, # INT -> número de W-operadores em camada
     wlen = 3,  # INT -> tamnho do W-operador (wlen*wlen)
@@ -12,7 +12,7 @@ if __name__ == "__main__":
     error_type = 'iou', # 'mae' / 'iou' -> tipo de erro no cálculo
     neighbors_sample = 10, # INT/False -> se vamos amostrar vizinhos e se sim quantos
     epoch_f = 100, # INT -> quantidade de épocas no reticulado das funções booleanas (janela fixa)
-    epoch_w = 20, # INT -> quantidade de épocas no reticulado das janelas
+    epoch_w = 5, # INT -> quantidade de épocas no reticulado das janelas
     batch = 1, # INT -> qtd de imagens de treino utilizada
     path_results = 'results_V1', # STR -> pasta para ser salvo os resultados das imagens
     name_save='_V1', # STR -> final a ser salvo nos arquivos (W, joint, W_hist)

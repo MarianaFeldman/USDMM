@@ -10,7 +10,10 @@ import os
 
 class WOMC:
     
-    def __init__(self, new, nlayer, wlen, train_size, val_size, test_size, error_type, neighbors_sample, epoch_f, epoch_w, batch, path_results, name_save, seed, parallel):
+    def __init__(self, new, nlayer, wlen, train_size, val_size, test_size, error_type, 
+                 neighbors_sample, epoch_f, epoch_w, batch, path_results, name_save, seed, parallel, 
+                 early_stop_round_f , early_stop_round_w):
+        
         self.nlayer = nlayer
         self.wlen = wlen
         self.wsize = wlen ** 2
@@ -37,10 +40,12 @@ class WOMC:
             self.joint = np.load('joint'+name_save+'.txt', allow_pickle=True)
             self.W = np.load('W'+name_save+'.txt', allow_pickle=True)
             #self.w_hist = np.load('W_hist'+name_save+'.txt', allow_pickle=True)
-        
+        print(f"Janela Inicializada: {self.W}")
+        print(f"Joint Inicializada: {self.joint}")
         self.w_hist = {"W_key": [],"W":[],"error":[], "f_epoch_min":[]}
         self.windows_visit = 1
         self.error_ep_f_hist = {"W_key": [], "epoch": [], "error":[], "joint":[]}
+        self.error_ep_f = {"W_key": [], "epoch": [], "error":[]}
         
         self.train, self.ytrain = self.get_images(train_size, 'train')
         self.val, self.yval = self.get_images(val_size, 'val')
@@ -54,6 +59,10 @@ class WOMC:
         self.name_save = name_save
         self.parallel = parallel
         self.joint_hist = []
+
+        self.early_stop_round_f = early_stop_round_f
+        self.early_stop_round_w = early_stop_round_w
+        print('-.-.-.-.-.-.-.-.-.-.-')
         
         
 
@@ -244,17 +253,16 @@ class WOMC:
             ytrain_b = copy.deepcopy(self.ytrain)
             Wtrain,w_error,_ =  self.window_error_generate(W, joint, self.train, self.train_size, self.ytrain, self.error_type, 0, 0)
         self.joint_hist = []
-        #print('----------')
-        #print('Entrando no get error window')
         flg = 0
         epoch_min = 0
         for ep in range(self.epoch_f):
             if self.batch<self.train_size:
                 train_b, ytrain_b = self.sort_images(self.train,self.ytrain, self.batch, self.train_size)
-                Wtrain,w_error,_ =  self.window_error_generate(W, joint, train_b, self.batch, ytrain_b, self.error_type, self.train, 0)
-            #print('Func-EP ', ep, '/ error ', w_error)
+                #Wtrain,w_error_b,_ =  self.window_error_generate(W, joint, train_b, self.batch, ytrain_b, self.error_type, self.train, 0)
+                Wtrain = self.run_window_hood(train_b, self.batch, W, joint, 0, 0)
+                if ep==1:
+                    w_error = self.calculate_error(ytrain_b, Wtrain, self.error_type)
             self.joint_hist.append(self.joint_history(joint, self.nlayer))
-            #error_ep = {"error":[],"joint":[]}
             for k in range(self.nlayer):
                 if not self.neighbors_sample:
                     neighbors_to_visit = range(len(joint[k]))
@@ -263,8 +271,6 @@ class WOMC:
                 for i in neighbors_to_visit:
                      self.calculate_neighbors(W,  joint, k, i, Wtrain, train_b,ytrain_b,ep)
                             
-                            #futures.append(executor.submit(self.window_error_generate, W, joint_temp, train_b, self.batch, ytrain_b, self.error_type, Wtrain, k))   
-
             ix = [i for i, value in enumerate(self.error_ep_f_hist["W_key"]) if value == self.windows_visit]
             error_ix = [self.error_ep_f_hist["error"][i] for i in ix]
             joint_ix = [self.error_ep_f_hist["joint"][i] for i in ix]
@@ -272,26 +278,28 @@ class WOMC:
             error_min_ep = min(error_ix)
             joint = joint_ix[error_ix.index(min(error_ix))]
 
-            #error_min_ep = min(error_ep['error'])
-            #joint = error_ep['joint'][error_ep['error'].index(min(error_ep['error']))]
+            self.error_ep_f["W_key"].append(self.windows_visit) 
+            self.error_ep_f["epoch"].append(ep) 
+            self.error_ep_f["error"].append(error_min_ep)
+
             if error_min_ep < w_error:
+                #print(f"época {ep}, erro antigo: {w_error}, erro menor: {error_min_ep}")
                 w_error = error_min_ep
                 joint_min = copy.deepcopy(joint)
                 flg=1
-                epoch_min = ep 
+                epoch_min = ep
+
+            if (ep-epoch_min)>self.early_stop_round_f :
+                break
         if flg==1:
             joint = copy.deepcopy(joint_min)
-            
-        #print('----------')
-        #print('end of testing, fl = ', flg)
+
         if self.batch<self.val_size:
                 val_b, yval_b = self.sort_images(self.val,self.yval, self.batch, self.val_size)
                 _,error_val,_ =  self.window_error_generate(W, joint, val_b, self.batch, yval_b, self.error_type, 0, 0)
         else:
             _,error_val,_ =  self.window_error_generate(W, joint, self.val, self.val_size, self.yval, self.error_type, self.val, 0)
         error = np.array([w_error, error_val])
-        #print('error da época ', epoch_min, ': ', w_error)
-        #print('-.-.-.-.-.-.-.-.-.-')
         return (joint, error, epoch_min)
 
     def calculate_neighbors(self,W,  joint, k, i, Wlast, img,yimg, ep):
@@ -303,8 +311,6 @@ class WOMC:
         j_temp = self.joint_history(joint_temp, self.nlayer)
         if j_temp not in self.joint_hist:
             self.joint_hist.append(j_temp)
-            #W_hood = self.run_window_hood(img, self.batch, W, joint_temp, Wlast, k)
-            #error_hood = self.calculate_error(yimg, W_hood, self.error_type)
             _,error_hood, joint_temp = self.window_error_generate(W, joint_temp, img, self.batch, yimg, self.error_type, Wlast, k)
             self.error_ep_f_hist["W_key"].append(self.windows_visit)
             self.error_ep_f_hist["epoch"].append(ep)
@@ -314,25 +320,21 @@ class WOMC:
             
 
     def get_error_window_parallel(self,W, joint):
-        #start = time()
         if self.batch>=self.train_size:
             train_b = copy.deepcopy(self.train)
             ytrain_b = copy.deepcopy(self.ytrain)
             Wtrain,w_error,_ =  self.window_error_generate(W, joint, self.train, self.train_size, self.ytrain, self.error_type, 0, 0)
         self.joint_hist = []
-        #print('----------')
-        #print('Entrando no get error window')
         flg = 0
         epoch_min = 0
-        for ep in range(self.epoch_f):
+        for ep in range(1,self.epoch_f+1):
             if self.batch<self.train_size:
                 train_b, ytrain_b = self.sort_images(self.train,self.ytrain, self.batch, self.train_size)
-                Wtrain,w_error,_ =  self.window_error_generate(W, joint, train_b, self.batch, ytrain_b, self.error_type, self.train, 0)
-            #print('Func-EP ', ep, '/ error ', w_error)
+                #Wtrain,w_error_b,_ =  self.window_error_generate(W, joint, train_b, self.batch, ytrain_b, self.error_type, self.train, 0)
+                Wtrain = self.run_window_hood(train_b, self.batch, W, joint, 0, 0)
+                if ep==1:
+                    w_error = self.calculate_error(ytrain_b, Wtrain, self.error_type)
             self.joint_hist.append(self.joint_history(joint, self.nlayer))
-            #error_ep = {"error":[],"joint":[]}
-            #futures = []
-           # with concurrent.futures.ThreadPoolExecutor() as executor:
             for k in range(self.nlayer):
                 if not self.neighbors_sample:
                     neighbors_to_visit = range(len(joint[k]))
@@ -340,11 +342,6 @@ class WOMC:
                     neighbors_to_visit = self.sort_neighbor(joint[k], self.neighbors_sample)
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     [executor.submit(self.calculate_neighbors,W,  joint, k, i, Wtrain, train_b,ytrain_b,ep) for i in neighbors_to_visit]
-                    #for i in neighbors_to_visit:
-                       
-                       # executor.submit(self.calculate_neighbors,W,  joint, k, i, Wtrain, train_b,ytrain_b,ep)
-                            
-                            #futures.append(executor.submit(self.window_error_generate, W, joint_temp, train_b, self.batch, ytrain_b, self.error_type, Wtrain, k))   
 
             ix = [i for i, value in enumerate(self.error_ep_f_hist["W_key"]) if value == self.windows_visit]
             error_ix = [self.error_ep_f_hist["error"][i] for i in ix]
@@ -352,18 +349,25 @@ class WOMC:
         
             error_min_ep = min(error_ix)
             joint = joint_ix[error_ix.index(min(error_ix))]
-            #joint = error_ep['joint'][error_ep['error'].index(min(error_ep['error']))]
+
+            self.error_ep_f["W_key"].append(self.windows_visit) 
+            self.error_ep_f["epoch"].append(ep) 
+            self.error_ep_f["error"].append(error_min_ep) 
 
             if error_min_ep < w_error:
-                w_error = error_min_ep
+                #print(f"época {ep}, erro antigo: {w_error}, erro menor: {error_min_ep}")
+                w_error = copy.deepcopy(error_min_ep)
                 joint_min = copy.deepcopy(joint)
                 flg=1
                 epoch_min = ep 
+            #print(f"época atual {ep} / época mínima {epoch_min} / menor erro {w_error}")
+            
+            if (ep-epoch_min)>self.early_stop_round_f :
+                break
+
         if flg==1:
             joint = copy.deepcopy(joint_min)
             
-        #print('----------')
-        #print('end of testing, fl = ', flg)
         if self.batch<self.val_size:
             val_b, yval_b = self.sort_images(self.val,self.yval, self.batch, self.val_size)
             _,error_val,_ =  self.window_error_generate(W, joint, val_b, self.batch, yval_b, self.error_type, 0, 0)
@@ -371,11 +375,6 @@ class WOMC:
             _,error_val,_ =  self.window_error_generate(W, joint, self.val, self.val_size, self.yval, self.error_type, 0, 0)
         
         error = np.array([w_error, error_val])
-        #print('error da época ', epoch_min, ': ', w_error)
-        #print('-.-.-.-.-.-.-.-.-.-')
-        #end = time()
-        #print('tempo de execução: {}'.format(end - start))
-        
         return (joint, error, epoch_min)
 
 
@@ -542,9 +541,12 @@ class WOMC:
                 W_min = copy.deepcopy(W)
                 joint_min = copy.deepcopy(joint)
             
-            error_ep['epoch'].append(0)
+            error_ep['epoch'].append(ep)
             error_ep['error_train'].append(error[0])
             error_ep['error_val'].append(error[1])
+
+            if (ep-ep_min)>self.early_stop_round_w :
+                break
 
                 
         print('--------------') 
@@ -557,15 +559,19 @@ class WOMC:
         print('tempo de execução: {}'.format(end - start))   
         print('época-min: ',ep_min, ' - com erro: ',error )
         print('Erro de treino: ', error_train, ' / Erro de validação: ', error_val, ' / Erro de teste: ', error_test)
-        print('count ficou em: ', self.count)
+        #print('count ficou em: ', self.count)
 
         self.save_window(joint, W)
         Wtrain = self.run_window_hood(self.train, self.train_size, W_min, joint_min, W, 0)
         Wval = self.run_window_hood(self.val, self.val_size, W_min, joint_min, W, 0)
         self.save_results_complet(Wtrain, Wval, Wtest)
         pickle.dump(self.w_hist, open('W_hist'+self.name_save+'.txt', 'wb'))
-        pickle.dump(error_ep, open('error_ep_w_'+self.name_save+'.txt', 'wb'))
-        pickle.dump(self.error_ep_f_hist, open('error_ep_f_'+self.name_save+'.txt', 'wb'))
+        pickle.dump(error_ep, open('error_ep_w'+self.name_save+'.txt', 'wb'))
+        pickle.dump(self.error_ep_f, open('error_ep_f'+self.name_save+'.txt', 'wb'))
+        pickle.dump(self.error_ep_f_hist, open('error_ep_f_hist'+self.name_save+'.txt', 'wb'))
+        print(f"Janela Final Aprendida: {W_min}")
+        print(f"Joint Final Aprendida: {joint_min}")
+
         
     
     def teste(self, parallel):

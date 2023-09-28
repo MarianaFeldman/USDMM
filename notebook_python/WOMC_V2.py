@@ -559,8 +559,8 @@ class WOMC:
             
             #self.save_window(joint, W)
             #self.save_results_complet(Wtrain, Wval, Wtest)
-            self.save_to_csv(error_ep, self.path_results+'/error_ep_w'+self.name_save+'_epoch'+ep)
-            self.save_to_csv(self.error_ep_f, self.path_results+'/error_ep_f'+self.name_save+'_epoch'+ep)
+            self.save_to_csv(error_ep, self.path_results+'/error_ep_w'+self.name_save+'_epoch'+str(ep))
+            self.save_to_csv(self.error_ep_f, self.path_results+'/error_ep_f'+self.name_save+'_epoch'+str(ep))
             #self.save_to_csv(self.error_ep_f_hist, self.path_results+'/error_ep_f_hist'+self.name_save)
 
             time_min = (time() -  self.start_time) / 60

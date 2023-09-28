@@ -139,7 +139,7 @@ class WOMC:
             x[(x==1)]=0
             cv2.imwrite(self.path_results+'test'+s+self.name_save+'.jpg', x)
     
-    def save_results_complet(self, Wtrain, Wval, Wtest):
+    def save_results_complet(self, Wtrain, Wval, Wtest, ep = None):
         for img in range(len(Wtrain)):
             s = str(img+1)
             s = s.zfill(2)
@@ -147,7 +147,7 @@ class WOMC:
                 x = copy.deepcopy(Wtrain[img][k])
                 x[(x==0)]=255
                 x[(x==1)]=0
-                cv2.imwrite(self.path_results+'/train_op'+str(k+1)+'_'+s+self.name_save+'.jpg', x)
+                cv2.imwrite(self.path_results+'/train_op'+str(k+1)+'_'+s+self.name_save+ep+'.jpg', x)
 
         for img in range(len(Wval)):
             s = str(img+1)
@@ -156,7 +156,7 @@ class WOMC:
                 x = copy.deepcopy(Wval[img][k])
                 x[(x==0)]=255
                 x[(x==1)]=0
-                cv2.imwrite(self.path_results+'/val_op'+str(k+1)+'_'+s+self.name_save+'.jpg', x)
+                cv2.imwrite(self.path_results+'/val_op'+str(k+1)+'_'+s+self.name_save+ep+'.jpg', x)
 
         for img in range(len(Wtest)):
             s = str(img+1)
@@ -165,7 +165,7 @@ class WOMC:
                 x = copy.deepcopy(Wtest[img][k])
                 x[(x==0)]=255
                 x[(x==1)]=0
-                cv2.imwrite(self.path_results+'/test_op'+str(k+1)+'_'+s+self.name_save+'.jpg', x)
+                cv2.imwrite(self.path_results+'/test_op'+str(k+1)+'_'+s+self.name_save+ep+'.jpg', x)
     
     def apply_window(self, x, W_n, j_n):
         Xl = np.c_[np.zeros([x.shape[0], self.increase], dtype=int), x, np.zeros([x.shape[0], self.increase], dtype=int)]
@@ -547,6 +547,11 @@ class WOMC:
                 error_min = copy.deepcopy(error)
                 W_min = copy.deepcopy(W)
                 joint_min = copy.deepcopy(joint)
+
+                Wtrain = self.run_window_hood(self.train, self.train_size, W, joint, 0, 0)
+                Wval = self.run_window_hood(self.val, self.val_size, W, joint, 0, 0)
+                Wtest = self.run_window_hood(self.test, self.test_size, W, joint, 0, 0)
+                self.save_results_complet(Wtrain, Wval, Wtest, f'_epoch{ep}')
             
             error_ep['epoch'].append(ep)
             error_ep['error_train'].append(error[0])
@@ -554,8 +559,8 @@ class WOMC:
             
             #self.save_window(joint, W)
             #self.save_results_complet(Wtrain, Wval, Wtest)
-            self.save_to_csv(error_ep, self.path_results+'/error_ep_w'+self.name_save)
-            self.save_to_csv(self.error_ep_f, self.path_results+'/error_ep_f'+self.name_save)
+            self.save_to_csv(error_ep, self.path_results+'/error_ep_w'+self.name_save+'_epoch'+ep)
+            self.save_to_csv(self.error_ep_f, self.path_results+'/error_ep_f'+self.name_save+'_epoch'+ep)
             #self.save_to_csv(self.error_ep_f_hist, self.path_results+'/error_ep_f_hist'+self.name_save)
 
             time_min = (time() -  self.start_time) / 60

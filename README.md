@@ -1,2 +1,2 @@
-# WOMC
-Tese de Mestrado - W-operadores Multicamadas
+# Unrestricted Sequential Discrete Morphological Neural Networks
+

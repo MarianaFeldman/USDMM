@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # USDMM - Unrestricted Sequential Discrete Morphological Neural Networks
 
 
@@ -54,9 +55,11 @@ opencv-python==4.5.3.56
 
 ## Features
 
-**fit()** -> train the USDMM 
-**results_after_fit** -> open de  "W_**name_save**.txt" and "joint_**name_save**.txt" archives and generate the images
-**test()** -> find error for a fixed window for testing
+* **fit()** -> train the USDMM 
+
+* **results_after_fit** -> open de  "W_**name_save**.txt" and "joint_**name_save**.txt" archives and generate the images
+
+* **test()** -> find error for a fixed window for testing
 
 ## Contributing
 
@@ -67,3 +70,7 @@ Maintainer: Mariana Feldman <mariana.feldman@ime.usp.br>
 
  D. Marcondes, M. Feldman, J. Barrera. Discrete Morphological Neural Networks. 2023.
  <https://doi.org/10.48550/arXiv.2310.04584>
+=======
+# Unrestricted Sequential Discrete Morphological Neural Networks
+
+>>>>>>> 7189eb5b9830ffdc4561bd9d666aba4c522c2aa7

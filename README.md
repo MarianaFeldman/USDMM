@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # USDMM - Unrestricted Sequential Discrete Morphological Neural Networks
 
 
@@ -70,7 +70,3 @@ Maintainer: Mariana Feldman <mariana.feldman@ime.usp.br>
 
  D. Marcondes, M. Feldman, J. Barrera. Discrete Morphological Neural Networks. 2023.
  <https://doi.org/10.48550/arXiv.2310.04584>
-=======
-# Unrestricted Sequential Discrete Morphological Neural Networks
-
->>>>>>> 7189eb5b9830ffdc4561bd9d666aba4c522c2aa7

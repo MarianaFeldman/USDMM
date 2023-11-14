@@ -46,7 +46,7 @@ class WOMC:
         print(f"Joint Inicializada: {self.joint}")
         self.w_hist = {"W_key": [],"W":[],"error":[], "f_epoch_min":[]}
         self.windows_visit = 1
-        self.error_ep_f_hist = {"W_key": [], "epoch": [], "error":[], "joint":[]}
+        self.error_ep_f_hist = {}
         self.error_ep_f = {"W_key": [], "epoch_w": [], "epoch_f":[], "error":[], "time":[] }
         wind_size_dict = {f'window_size_{i}': [] for i in range(self.nlayer)}
         self.error_ep_f = {key: value for d in [self.error_ep_f, wind_size_dict] for key, value in d.items()}
@@ -60,6 +60,9 @@ class WOMC:
         isExist = os.path.exists(path_results)
         if not isExist:
             os.makedirs(path_results)
+        if not isExist:
+            os.makedirs(f'{path_results}/run')
+        print("Resultados serão salvos em ",path_results)
         print("Resultados serão salvos em ",path_results)
         self.name_save = name_save
         self.parallel = parallel
@@ -91,7 +94,7 @@ class WOMC:
         ni = int(W[~np.isnan(W)].sum())
         for i in itertools.product([0, 1], repeat=ni):
             Ji.append(''.join(np.array(i).astype(str)))
-        random.seed(self.random_list[self.count])
+        np.random.seed(self.random_list[self.count])
         self.count +=1
         return np.c_[Ji, np.random.randint(2, size=len(Ji))]
 
@@ -114,58 +117,37 @@ class WOMC:
             yimg.append(self._convert_binary(y))
         return ximg, yimg
 
-    def save_results(self, Wtrain, Wval, Wtest):
-        for img in range(len(Wtrain)):
-            s = str(img+1)
-            s = s.zfill(2)
-            x = copy.deepcopy(Wtrain[img][1])
-            x[(x==0)]=255
+    def _save_results_in(self, W, img_type, k, ep = None):
+        for img in range(1,len(W)+1):
+            x = copy.deepcopy(W[img-1][k])
+            x[(x==-1)]=255
             x[(x==1)]=0
-            cv2.imwrite(self.path_results+'train'+s+self.name_save+'.jpg', x)
-
-        for img in range(len(Wval)):
-            s = str(img+1)
-            s = s.zfill(2)
-            x = copy.deepcopy(Wval[img][1])
-            x[(x==0)]=255
-            x[(x==1)]=0
-            cv2.imwrite(self.path_results+'val'+s+self.name_save+'.jpg', x)
-        
-        for img in range(len(Wtest)):
-            s = str(img+1)
-            s = s.zfill(2)
-            x = copy.deepcopy(Wtest[img][1])
-            x[(x==0)]=255
-            x[(x==1)]=0
-            cv2.imwrite(self.path_results+'test'+s+self.name_save+'.jpg', x)
+            cv2.imwrite(f'{self.path_results}/run/{img_type}_op{k+1}_{img:02d}{self.name_save}{ep}.jpg', x)
     
-    def save_results_complet(self, Wtrain, Wval, Wtest, ep = None):
-        for img in range(len(Wtrain)):
-            s = str(img+1)
-            s = s.zfill(2)
-            for k in range(self.nlayer):
-                x = copy.deepcopy(Wtrain[img][k])
-                x[(x==0)]=255
-                x[(x==1)]=0
-                cv2.imwrite(self.path_results+'/train_op'+str(k+1)+'_'+s+self.name_save+ep+'.jpg', x)
+    def _save_results(self, W, img_type, k):
+        for img in range(1,len(W)+1):
+            x = copy.deepcopy(W[img-1][k])
+            x[(x==-1)]=255
+            x[(x==1)]=0
+            cv2.imwrite(f'{self.path_results}/{img_type}_op{k+1}_{img:02d}{self.name_save}.jpg', x)
 
-        for img in range(len(Wval)):
-            s = str(img+1)
-            s = s.zfill(2)
-            for k in range(self.nlayer):
-                x = copy.deepcopy(Wval[img][k])
-                x[(x==0)]=255
-                x[(x==1)]=0
-                cv2.imwrite(self.path_results+'/val_op'+str(k+1)+'_'+s+self.name_save+ep+'.jpg', x)
-
-        for img in range(len(Wtest)):
-            s = str(img+1)
-            s = s.zfill(2)
-            for k in range(self.nlayer):
-                x = copy.deepcopy(Wtest[img][k])
-                x[(x==0)]=255
-                x[(x==1)]=0
-                cv2.imwrite(self.path_results+'/test_op'+str(k+1)+'_'+s+self.name_save+ep+'.jpg', x)
+    def save_results(self, Wtrain, Wval, Wtest):
+        self._save_results_in(Wtrain, 'train',1)
+        self._save_results_in(Wval, 'val',1)
+        self._save_results_in(Wtest, 'test',1)
+        
+    
+    def save_results_complet_in(self, Wtrain, Wval, Wtest, ep = None):
+        for k in range(self.nlayer):
+            self._save_results_in(Wtrain, 'train',k, ep)
+            self._save_results_in(Wval, 'val',k, ep)
+            self._save_results_in(Wtest, 'test',k, ep)
+    
+    def save_results_complet(self, Wtrain, Wval, Wtest):
+        for k in range(self.nlayer):
+            self._save_results(Wtrain, 'train',k)
+            self._save_results(Wval, 'val',k)
+            self._save_results(Wtest, 'test',k)
     
     def apply_window(self, x, W_n, j_n):
         Xl = np.c_[np.zeros([x.shape[0], self.increase], dtype=int), x, np.zeros([x.shape[0], self.increase], dtype=int)]
@@ -267,6 +249,7 @@ class WOMC:
             W_size.append(np.sum((W[i] == 1)))
 
         for ep in range(self.epoch_f):
+            self.error_ep_f_hist={"error":[], "joint":[], "ix":[]}
             if self.batch<self.train_size:
                 train_b, ytrain_b = self.sort_images(self.train,self.ytrain, self.batch, self.train_size)
                 #Wtrain,w_error_b,_ =  self.window_error_generate(W, joint, train_b, self.batch, ytrain_b, self.error_type, self.train, 0)
@@ -282,12 +265,11 @@ class WOMC:
                 for i in neighbors_to_visit:
                      self.calculate_neighbors(W,  joint, k, i, Wtrain, train_b,ytrain_b,ep)
                             
-            ix = [i for i, value in enumerate(self.error_ep_f_hist["W_key"]) if value == self.windows_visit]
-            error_ix = [self.error_ep_f_hist["error"][i] for i in ix]
-            joint_ix = [self.error_ep_f_hist["joint"][i] for i in ix]
-
-            error_min_ep = min(error_ix)
-            joint = joint_ix[error_ix.index(min(error_ix))]
+            error_min_ep = min(self.error_ep_f_hist['error'])
+            ix_min = [i for i,e in enumerate(self.error_ep_f_hist['error']) if e==error_min_ep]
+            runs = [v for i, v in enumerate(self.error_ep_f_hist['ix']) if i in(ix_min)]
+            ix_run = self.error_ep_f_hist['ix'].index(min(runs))
+            joint = self.error_ep_f_hist['joint'][ix_run]
 
             self.error_ep_f["W_key"].append(self.windows_visit) 
             self.error_ep_f["epoch_w"].append(ep_w) 
@@ -322,10 +304,9 @@ class WOMC:
         if j_temp not in self.joint_hist:
             self.joint_hist.append(j_temp)
             _,error_hood, joint_temp = self.window_error_generate(W, joint_temp, img, self.batch, yimg, self.error_type, Wlast, k)
-            self.error_ep_f_hist["W_key"].append(self.windows_visit)
-            self.error_ep_f_hist["epoch"].append(ep)
             self.error_ep_f_hist["error"].append(error_hood)
             self.error_ep_f_hist["joint"].append(joint_temp)
+            self.error_ep_f_hist["ix"].append(str(k)+str(i))
 
             
 
@@ -341,6 +322,7 @@ class WOMC:
         for i in range(self.nlayer):
             W_size.append(np.sum((W[i] == 1)))
         for ep in range(1,self.epoch_f+1):
+            self.error_ep_f_hist={"error":[], "joint":[], "ix":[]}
             if self.batch<self.train_size:
                 train_b, ytrain_b = self.sort_images(self.train,self.ytrain, self.batch, self.train_size)
                 #Wtrain,w_error_b,_ =  self.window_error_generate(W, joint, train_b, self.batch, ytrain_b, self.error_type, self.train, 0)
@@ -356,12 +338,11 @@ class WOMC:
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     [executor.submit(self.calculate_neighbors,W,  joint, k, i, Wtrain, train_b,ytrain_b,ep) for i in neighbors_to_visit]
 
-            ix = [i for i, value in enumerate(self.error_ep_f_hist["W_key"]) if value == self.windows_visit]
-            error_ix = [self.error_ep_f_hist["error"][i] for i in ix]
-            joint_ix = [self.error_ep_f_hist["joint"][i] for i in ix]
-        
-            error_min_ep = min(error_ix)
-            joint = joint_ix[error_ix.index(min(error_ix))]
+            error_min_ep = min(self.error_ep_f_hist['error'])
+            ix_min = [i for i,e in enumerate(self.error_ep_f_hist['error']) if e==error_min_ep]
+            runs = [v for i, v in enumerate(self.error_ep_f_hist['ix']) if i in(ix_min)]
+            ix_run = self.error_ep_f_hist['ix'].index(min(runs))
+            joint = self.error_ep_f_hist['joint'][ix_run]
 
             self.error_ep_f["W_key"].append(self.windows_visit) 
             self.error_ep_f["epoch_w"].append(ep_w) 
@@ -536,14 +517,14 @@ class WOMC:
                 Wtrain = self.run_window_hood(self.train, self.train_size, W, joint, 0, 0)
                 Wval = self.run_window_hood(self.val, self.val_size, W, joint, 0, 0)
                 Wtest = self.run_window_hood(self.test, self.test_size, W, joint, 0, 0)
-                self.save_results_complet(Wtrain, Wval, Wtest, f'_epoch{ep}')
+                self.save_results_complet_in(Wtrain, Wval, Wtest, f'_epoch{ep}')
             
             error_ep['epoch'].append(ep)
             error_ep['error_train'].append(error[0])
             error_ep['error_val'].append(error[1])
             
-            self.save_to_csv(error_ep, self.path_results+'/error_ep_w'+self.name_save+'_epoch'+str(ep))
-            self.save_to_csv(self.error_ep_f, self.path_results+'/error_ep_f'+self.name_save+'_epoch'+str(ep))
+            self.save_to_csv(error_ep, self.path_results+'/run/error_ep_w'+self.name_save+'_epoch'+str(ep))
+            self.save_to_csv(self.error_ep_f, self.path_results+'/run/error_ep_f'+self.name_save+'_epoch'+str(ep))
 
             time_min = (time() -  self.start_time) / 60
             print(f'Time: {time_min:.2f} | Epoch {ep} / {self.epoch_w} - Validation error: {error[1]}')
@@ -630,5 +611,7 @@ class WOMC:
             x[(x==1)]=0
             cv2.imwrite('./'+self.path_results+'/test_op2_'+s+self.name_save+'.jpg', x)
 
-    
+    def test2(self):
+        Wtrain,w_error,_ =  self.window_error_generate(self.W, self.joint, self.train, self.train_size, self.ytrain, self.error_type, 0, 0)
+        return Wtrain,w_error, self.W, self.joint
         

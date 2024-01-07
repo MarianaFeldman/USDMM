@@ -30,22 +30,18 @@ class WOMC:
         self.increase = int(round(wlen/2-0.1,0))
         self.count = 0
         self.random_list = self.randon_seed_number(seed)
+
+        
         
         if new:
             Wini = np.array([np.nan, 1., np.nan, 1., 1., 1., np.nan, 1., np.nan])
-            #self.W = [self.create_window() for _ in range(self.nlayer)]
             self.W = [Wini.copy() for _ in range(self.nlayer)]
-            self.joint = [self.create_joint(self.W[i]) for i in range(self.nlayer)]
-            #self.w_hist = {"W":[],"error":[], "f_epoch_min":[]}
+            #self.joint = [self.create_joint(self.W[i]) for i in range(self.nlayer)]
 
         else:
-            self.joint = np.load('./data/joint'+new+'.txt', allow_pickle=True)
             self.W = np.load('./data/W'+new+'.txt', allow_pickle=True)
-            #self.w_hist = np.load('W_hist'+name_save+'.txt', allow_pickle=True)
         print(f"Janela Inicializada: {self.W}")
-        print(f"Joint Inicializada: {self.joint}")
-        #self.W_matrices = self.create_w_matrices(self.W, self.joint)
-        #self.bias = np.nansum(self.W, axis=1) - 1
+        self.parameter_nn = self.initialize_parameters_nn(self.W)
 
         self.w_hist = {"W_key": [],"W":[],"error":[], "f_epoch_min":[]}
         self.windows_visit = 1
@@ -74,6 +70,8 @@ class WOMC:
         self.early_stop_round_f = early_stop_round_f
         self.early_stop_round_w = early_stop_round_w
 
+        self.lr = 0.01
+
         self.start_time = 0
         print('------------------------------------------------------------------')
         
@@ -97,9 +95,7 @@ class WOMC:
         ni = int(W[~np.isnan(W)].sum())
         for i in itertools.product([0, 1], repeat=ni):
             Ji.append(''.join(np.array(i).astype(str)))
-        np.random.seed(self.random_list[self.count])
-        self.count +=1
-        return np.c_[Ji, np.random.randint(2, size=len(Ji))]
+        return Ji, np.random.randint(2, size=len(Ji))
     
     
     def find_minterms(self, truth_table):
@@ -112,24 +108,20 @@ class WOMC:
 
         return minterms
     
-    def create_w_matrices(self, W, joint):
-        matrices = []
-        for k in range(self.nlayer):
-            matrix_k = []
-            reduced_minterms = self.find_minterms(joint[k])
-            for minterm in range(len(reduced_minterms)):
-                matrix = np.copy(W[k])
-                c=0
-                for i in np.where(W[k]==1)[0]:
-                    matrix[i] = reduced_minterms[minterm][c]
-                    c+=1
-                matrix = np.where(matrix==0,-1,matrix)
-                matrix = np.nan_to_num(matrix)
-                matrix_k.append(matrix.reshape((3, 3)))
-            matrices.append(matrix_k)
-        return matrices
-
-
+    def create_w_matrices(self, W):
+        matrix_k = []
+        reduced_minterms, weights = self.create_joint(W)
+        for minterm in range(len(reduced_minterms)):
+            matrix = np.copy(W)
+            c=0
+            for i in np.where(W==1)[0]:
+                matrix[i] = reduced_minterms[minterm][c]
+                c+=1
+            matrix = np.where(matrix==0,-1,matrix)
+            matrix = np.nan_to_num(matrix)
+            matrix_k.append(matrix.reshape((3, 3)))
+        return matrix_k, weights
+    
     def _convert_binary(self,img):
         (_, img_bin) = cv2.threshold(img, 100, 255, cv2.THRESH_BINARY)
         img_bin = img_bin.astype('float64')
@@ -146,6 +138,29 @@ class WOMC:
             ximg.append(self._convert_binary(x))
             yimg.append(self._convert_binary(y))
         return ximg, yimg
+    
+    def get_images_2(self, img_size, img_type):
+        ximg = []
+        yimg = []
+        for img in range(1,img_size+1):
+            x = cv2.imread(f'./data/x/{img_type}{img:02d}.jpg', cv2.IMREAD_GRAYSCALE)
+            y = cv2.imread(f'./data/y/{img_type}{img:02d}.jpg', cv2.IMREAD_GRAYSCALE)
+            xbin = self._convert_binary(x)
+            xbin_inc = self.increase_zero(xbin)
+            ybin = self._convert_binary(y)
+            for i in range(xbin.shape[0]):
+                for j in range(xbin.shape[1]):
+                    window = np.array(xbin_inc[i:i + self.wlen, j:j + self.wlen]).flatten()
+                    window = (xbin_inc[i:i + self.wlen, j:j + self.wlen]).flatten()
+                    ximg.append(window)
+                    yimg.append(ybin[i, j])
+        return np.vstack(ximg) , np.array(yimg), xbin.shape[0]
+
+    def increase_zero(self, img):
+        img_inc = -np.ones((img.shape[0]+self.increase*2, img.shape[1]+self.increase*2), dtype=img.dtype)
+        img_inc[self.increase:img_inc.shape[0]-self.increase, self.increase:img_inc.shape[1]-self.increase] = img
+        return img_inc
+
     
     def _save_results_in(self, W, img_type, k, ep = None):
         for img in range(1,len(W)+1):
@@ -211,18 +226,20 @@ class WOMC:
             Wsample.append(Wsample_k)
         return Wsample
     
-    def apply_convolve(self, img, W_matrices, bias):
+    def apply_convolve(self, img, W_matrices, bias, weight):
         img_c = np.zeros([img.shape[0], img.shape[1]], dtype=float)
-        for kernel in W_matrices:
+        #_W_matrices = np.array(W_matrices) * weight[:, np.newaxis, np.newaxis]
+        for i, kernel in enumerate(W_matrices):
             img_b = cv2.copyMakeBorder(img, self.increase, self.increase, self.increase, self.increase, cv2.BORDER_CONSTANT, None, value = -1) 
             img_r = cv2.filter2D(img_b, -1, kernel)
             img_r = img_r-bias
             img_r = (img_r > 0).astype(float)
-            img_c += img_r[self.increase:img_r.shape[0]-self.increase, self.increase:img_r.shape[1]-self.increase]
+            img_c += img_r[self.increase:img_r.shape[0]-self.increase, self.increase:img_r.shape[1]-self.increase]*weight[i]
+        img_c = (img_c > 0).astype(float)
         img_c[img_c == 0] = -1
         return img_c
     
-    def run_window_convolve(self, sample, sample_size, W_matrices, Wlast, layer, bias):
+    def run_window_convolve(self, sample, sample_size, W_matrices, Wlast, layer, bias, weights):
         Wsample = []
         for k in range(sample_size):
             Wsample_k = [] 
@@ -230,30 +247,29 @@ class WOMC:
                 if layer > i:
                     Wsample_k.append(Wlast[k][i])
                 elif i==0:
-                    Wsample_k.append(self.apply_convolve(sample[k], W_matrices[i], bias[i]))
+                    Wsample_k.append(self.apply_convolve(sample[k], W_matrices[i], bias[i], weights[i]))
                 else:
-                    Wsample_k.append(self.apply_convolve(Wsample_k[i-1], W_matrices[i], bias[i]))
+                    Wsample_k.append(self.apply_convolve(Wsample_k[i-1], W_matrices[i], bias[i], weights[i]))
             Wsample.append(Wsample_k)
-        return Wsample
+        return np.array(Wsample)
 
     def window_error_generate(self, W_current, joint_current, sample, sample_size, y, error_type, Wlast, layer):
         W_hood = self.run_window_hood(sample, sample_size, W_current, joint_current, Wlast, layer)
         error_hood = self.calculate_error(y, W_hood, error_type)
         return W_hood,error_hood, joint_current
     
-    def window_error_generate_c(self, W_matrices, sample, sample_size, y, error_type, Wlast, layer, bias):
-        W_hood = self.run_window_convolve(sample, sample_size, W_matrices, Wlast, layer, bias)
+    def window_error_generate_c(self, W_matrices, sample, sample_size, y, error_type, Wlast, layer, bias, weights):
+        W_hood = self.run_window_convolve(sample, sample_size, W_matrices, Wlast, layer, bias, weights)
         error_hood = self.calculate_error(y, W_hood, error_type)
         return W_hood,error_hood
-    
 
     def calculate_error(self, y, h, et = 'mae'):
         error = 0
         n_samples = len(y)
         for k in range(n_samples):
-            h_z = copy.deepcopy(h[k][-1])
+            h_z = h[k][-1]
             h_z[h_z==-1]=0
-            y_z = copy.deepcopy(y[k])
+            y_z = y[k]
             y_z[y_z==-1]=0
             if et == 'mae':
                 sample_error = np.abs(h_z - y_z).sum()
@@ -301,16 +317,14 @@ class WOMC:
         filename_W =f'{self.path_results}/W{self.name_save}.txt'
         pickle.dump(W, open(filename_W, 'wb'))
 
-    def get_error_window(self,W, joint, ep_w):
+    def get_error_window(self,W, W_matrices, weights, ep_w):
 
-        W_matrices = self.create_w_matrices(W, joint)
         bias = np.nansum(W, axis=1) - 1
 
         if self.batch>=self.train_size:
             train_b = copy.deepcopy(self.train)
             ytrain_b = copy.deepcopy(self.ytrain)
-            Wtrain,w_error =  self.window_error_generate_c(W_matrices, self.train, self.train_size,self.ytrain, self.error_type, 0, 0, bias)
-
+            
         self.joint_hist = []
         flg = 0
         epoch_min = 0
@@ -322,11 +336,23 @@ class WOMC:
             self.error_ep_f_hist={"error":[], "joint":[], "ix":[]}
             if self.batch<self.train_size:
                 train_b, ytrain_b = self.sort_images(self.train,self.ytrain, self.batch, self.train_size)
-                Wtrain = self.run_window_convolve(train_b, self.batch, W_matrices, 0, 0, bias)
-                if ep==1:
-                    w_error = self.calculate_error(ytrain_b, Wtrain, self.error_type)
-            self.joint_hist.append(self.joint_history(joint, self.nlayer))
-            for k in range(self.nlayer):
+                
+            Wtrain,w_error =  self.window_error_generate_c(W_matrices, train_b, self.batch,ytrain_b, self.error_type, 0, 0, bias, weights)
+            error_last = w_error.copy()
+            for k in reversed(range(self.nlayer)):
+                
+                gradient = -2 * w_error * (1 - Wtrain[k]**2)  # Derivative of tanh
+                weights[k] -= self.lr * convolution(activated_result1.sum(axis=2), gradient2)
+
+                # Backward pass for the first layer
+                error1 = np.zeros_like(conv_result1)
+                for channel in range(filters_layer1.shape[2]):
+                    error1[:, :, channel] = convolution(gradient2, filters_layer2[:, :, 0])
+                
+                gradient1 = -2 * error1 * (1 - activated_result1**2)  # Derivative of tanh
+                for channel in range(filters_layer1.shape[2]):
+                    filters_layer1[:, :, channel] -= learning_rate * convolution(image[:, :, channel], gradient1[:, :, channel])
+
                 if not self.neighbors_sample:
                     neighbors_to_visit = range(len(joint[k]))
                 else:
@@ -359,7 +385,7 @@ class WOMC:
         if flg==1:
             joint = copy.deepcopy(joint_min)
         W_matrices = self.create_w_matrices(W, joint)
-        _,error_val =  self.window_error_generate_c(W_matrices, self.val, self.val_size, self.yval, self.error_type, self.val, 0, bias)
+        _,error_val =  self.window_error_generate_c(W_matrices, self.val, self.val_size, self.yval, self.error_type, self.val, 0, bias, weights)
         error = np.array([w_error, error_val])
         return (joint, error, epoch_min)
 
@@ -373,19 +399,19 @@ class WOMC:
         if j_temp not in self.joint_hist:
             self.joint_hist.append(j_temp)
             W_matrices = self.create_w_matrices(W, joint_temp)
-            _,error_hood = self.window_error_generate_c(W_matrices, img, self.batch, yimg, self.error_type, Wlast, k, bias)
+            _,error_hood = self.window_error_generate_c(W_matrices, img, self.batch, yimg, self.error_type, Wlast, k, bias,weights)
             self.error_ep_f_hist["error"].append(error_hood)
             self.error_ep_f_hist["joint"].append(joint_temp)
             self.error_ep_f_hist["ix"].append(str(k)+str(i))         
 
-    def get_error_window_parallel(self,W, joint, ep_w):
-        W_matrices = self.create_w_matrices(W, joint)
+    def get_error_window_parallel(self,W, joint, ep_w, weights):
+        W_matrices = self.create_w_matrices(W)
         bias = np.nansum(W, axis=1) - 1
         wv=str(self.windows_visit)
         if self.batch>=self.train_size:
             train_b = copy.deepcopy(self.train)
             ytrain_b = copy.deepcopy(self.ytrain)
-            Wtrain,w_error =  self.window_error_generate_c(W_matrices, self.train, self.train_size,self.ytrain, self.error_type, 0, 0, bias)
+            Wtrain,w_error =  self.window_error_generate_c(W_matrices, self.train, self.train_size,self.ytrain, self.error_type, 0, 0, bias,weights)
         self.joint_hist = []
         flg = 0
         epoch_min = 0
@@ -395,6 +421,9 @@ class WOMC:
         for ep in range(1,self.epoch_f+1):
             
             self.error_ep_f_hist={"error":[], "joint":[], "ix":[]}
+
+
+
             if self.batch<self.train_size:
                 train_b, ytrain_b = self.sort_images(self.train,self.ytrain, self.batch, self.train_size)
                 #Wtrain,w_error_b,_ =  self.window_error_generate(W, joint, train_b, self.batch, ytrain_b, self.error_type, self.train, 0)
@@ -436,7 +465,7 @@ class WOMC:
             joint = copy.deepcopy(joint_min)
             
         W_matrices = self.create_w_matrices(W, joint)
-        _,error_val =  self.window_error_generate_c(W_matrices, self.val, self.val_size, self.yval, self.error_type, self.val, 0, bias)
+        _,error_val =  self.window_error_generate_c(W_matrices, self.val, self.val_size, self.yval, self.error_type, self.val, 0, bias, weights)
         
         error = np.array([w_error, error_val])
         return (joint, error, epoch_min)
@@ -540,12 +569,14 @@ class WOMC:
 
     def fit(self):
         self.start_time = time()
+
+        W_matrices, weights = zip(*[self.create_w_matrices(self.W[i]) for i in range(self.nlayer)])
         
         # Primeira rodada da janela inicial
         if self.parallel:
-            joint, error,f_epoch_min = self.get_error_window_parallel(self.W,self.joint,0)
+            joint, error,f_epoch_min = self.get_error_window_parallel(self.W ,ep_w=0)
         else:
-            joint, error,f_epoch_min = self.get_error_window(self.W,self.joint,0)
+            joint, error,f_epoch_min = self.get_error_window(self.W,W_matrices, weights, ep_w=0)
 
         #self.save_window(joint, self.W)
 
@@ -611,9 +642,9 @@ class WOMC:
                 break
                 
         print('----------------------------------------------------------------------') 
-        Wtest,error_test =  self.window_error_generate_c(W_matrices, self.test, self.test_size, self.ytest, self.error_type, 0, 0, bias)
-        Wtrain,error_train =  self.window_error_generate_c(W_matrices, self.train, self.train_size, self.ytrain, self.error_type, 0, 0,bias)
-        Wval,error_val =  self.window_error_generate_c(W_matrices, self.val, self.val_size, self.yval, self.error_type, 0, 0, bias)
+        Wtest,error_test =  self.window_error_generate_c(W_matrices, self.test, self.test_size, self.ytest, self.error_type, 0, 0, bias, weights)
+        Wtrain,error_train =  self.window_error_generate_c(W_matrices, self.train, self.train_size, self.ytrain, self.error_type, 0, 0,bias, weights)
+        Wval,error_val =  self.window_error_generate_c(W_matrices, self.val, self.val_size, self.yval, self.error_type, 0, 0, bias, weights)
 
         print('End of testing')
         end_time = time()
@@ -651,9 +682,9 @@ class WOMC:
         W_matrices = self.create_w_matrices(W,joint)
         bias = np.nansum(W, axis=1) - 1
 
-        Wtest,error_test =  self.window_error_generate_c(W_matrices, self.test, self.test_size, self.ytest, self.error_type, 0, 0, bias)
-        Wtrain,error_train =  self.window_error_generate_c(W_matrices, self.train, self.train_size, self.ytrain, self.error_type, 0, 0,bias)
-        Wval,error_val =  self.window_error_generate_c(W_matrices, self.val, self.val_size, self.yval, self.error_type, 0, 0, bias)
+        Wtest,error_test =  self.window_error_generate_c(W_matrices, self.test, self.test_size, self.ytest, self.error_type, 0, 0, bias, weights)
+        Wtrain,error_train =  self.window_error_generate_c(W_matrices, self.train, self.train_size, self.ytrain, self.error_type, 0, 0,bias, weights)
+        Wval,error_val =  self.window_error_generate_c(W_matrices, self.val, self.val_size, self.yval, self.error_type, 0, 0, bias, weights)
 
         print(f'Train error: {error_train} / Validation error: {error_val} / Test error: {error_test}')
 
@@ -663,5 +694,79 @@ class WOMC:
     def test2(self):
         W_matrices = self.create_w_matrices(self.W, self.joint)
         bias = np.nansum(self.W, axis=1) - 1
-        Wtrain,w_error =  self.window_error_generate_c(W_matrices, self.train, self.train_size,self.ytrain, self.error_type, 0, 0, bias)
+        Wtrain,w_error =  self.window_error_generate_c(W_matrices, self.train, self.train_size,self.ytrain, self.error_type, 0, 0, bias, weights)
         return Wtrain,w_error, self.W, self.joint
+    ##############-------------------__###################
+    
+    def initialize_parameters_nn(self, W):
+        np.random.seed(self.random_list[self.count])
+        self.count+=1
+        parameters = {}
+        
+        W_size = np.nansum(W, axis=1)
+        for l in range(self.nlayer):
+            parameters['l' + str(l)] = {}
+            layer_dims = []
+            layer_dims.append(int(W_size[l]))
+            layer_dims.append(int(2**W_size[l]))
+            layer_dims.append(1)
+
+            for index in range(len(layer_dims)-1):
+                if (index) % 3 == 0:
+                    parameters['l' + str(l)]['W' + str(index)] = np.array([list(i) for i in itertools.product([-1, 1], repeat=layer_dims[index])])
+                    parameters['l' + str(l)]['b' + str(index)] = np.array([-layer_dims[index]+1]*layer_dims[index+1]).reshape(layer_dims[index+1],1)
+                else:
+                    parameters['l' + str(l)]['W' + str(index)] = np.random.randn(layer_dims[index+1], layer_dims[index]) * 0.1
+                    parameters['l' + str(l)]['b' + str(index)] = np.zeros((layer_dims[index+1], 1))
+
+        return parameters
+    
+    def L_forward(self, A, W, b):
+        Z = np.dot(W, A) + b
+        cache = (A, W, b)
+        return Z, cache
+
+    def L_activation_forward(self, A_prev, W, b):
+        Z, linear_cache = self.L_forward(A_prev, W, b)
+        A = np.tanh(Z)
+        activation_cache = Z
+        cache = (linear_cache, activation_cache)
+        return A, cache
+
+    def L_model_forward(self, X, parameters, layer):
+        A = X
+        caches = []
+        L = len(parameters['l'+str(layer)]) // 2
+
+        for l in range(1, L+1):
+            A_prev = A
+
+            A, cache = self.L_activation_forward(
+                A_prev, parameters['l'+str(layer)]["W" + str(l)], parameters['l'+str(layer)]["b" + str(l)])
+            caches.append(cache)
+
+        return A, caches
+    
+    def compute_cost(AL, Y):
+        v = Y * AL
+        cost = max(0, 1 - v)
+        cost = np.sum((np.maximum(0, 1 - v)) / AL.size)
+        return cost, v
+    
+    def L_backward(dZ, cache):
+        A_prev, W, b = cache
+        m = A_prev.shape[1]
+        dW = np.dot(dZ, A_prev.T) / m # delta W = gradient * neurons_inputs
+        db = np.sum(dZ, axis=1, keepdims=True) / m # delta bias = sigmoid derivative median
+        dA_prev = np.dot(W.T, dZ)
+
+        return dA_prev, dW, db
+        
+    def sigmoid_backward(dA, cache, v):
+        Z = cache
+        ##s = -y, if 1 - y * y_pred > 0
+        # s = 0, otherwise
+        s = 1/(1+np.exp(-Z))
+        dZ = dA * s * (1-s) # gradient = sigmoid derivative * logloss derivative
+        return dZ
+    

@@ -323,7 +323,7 @@ class WOMC:
             if self.batch<self.train_size:
                 train_b, ytrain_b = self.sort_images(self.train,self.ytrain, self.batch, self.train_size)
                 Wtrain = self.run_window_convolve(train_b, self.batch, W_matrices, 0, 0, bias)
-                if ep==1:
+                if ep==0:
                     w_error = self.calculate_error(ytrain_b, Wtrain, self.error_type)
             self.joint_hist.append(self.joint_history(joint, self.nlayer))
             for k in range(self.nlayer):

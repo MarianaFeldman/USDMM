@@ -1,3 +1,5 @@
+# V2 com convolução
+
 import numpy as np
 import itertools
 import cv2
@@ -26,6 +28,7 @@ class WOMC:
         self.epoch_f = epoch_f
         self.epoch_w = epoch_w
         self.batch = batch
+        self.num_batches = train_size // batch
         self.windows_continuos = np.load('./data/windows_continuos.txt', allow_pickle=True)
         self.increase = int(round(wlen/2-0.1,0))
         self.count = 0
@@ -300,6 +303,17 @@ class WOMC:
         pickle.dump(joint, open(filename_joint, 'wb'))
         filename_W =f'{self.path_results}/W{self.name_save}.txt'
         pickle.dump(W, open(filename_W, 'wb'))
+    
+    def get_batches(self, imgX,imgY, batch_size, img_size):
+        np.random.seed(self.random_list[self.count])
+        np.random.shuffle(imgX)
+        np.random.shuffle(imgY)
+        num_batches = img_size // batch_size
+
+        imgX_batches = np.array_split(imgX, num_batches)
+        imgY_batches = np.array_split(imgY, num_batches)
+        return imgX_batches, imgY_batches
+
 
     def get_error_window(self,W, joint, ep_w):
 
@@ -307,49 +321,52 @@ class WOMC:
         bias = np.nansum(W, axis=1) - 1
 
         if self.batch>=self.train_size:
-            train_b = copy.deepcopy(self.train)
-            ytrain_b = copy.deepcopy(self.ytrain)
-            Wtrain,w_error =  self.window_error_generate_c(W_matrices, self.train, self.train_size,self.ytrain, self.error_type, 0, 0, bias)
-
+            train_b = [copy.deepcopy(self.train)]
+            ytrain_b = [copy.deepcopy(self.ytrain)]
+        
         self.joint_hist = []
         flg = 0
         epoch_min = 0
         W_size = []
         for i in range(self.nlayer):
             W_size.append(np.sum((W[i] == 1)))
-
+        
+        Wtrain,w_error =  self.window_error_generate_c(W_matrices, self.train, self.train_size,self.ytrain, self.error_type, 0, 0, bias)
+        self.joint_hist.append(self.joint_history(joint, self.nlayer))
         for ep in range(self.epoch_f):
-            self.error_ep_f_hist={"error":[], "joint":[], "ix":[]}
+            
             if self.batch<self.train_size:
-                train_b, ytrain_b = self.sort_images(self.train,self.ytrain, self.batch, self.train_size)
-                Wtrain = self.run_window_convolve(train_b, self.batch, W_matrices, 0, 0, bias)
-                if ep==1:
-                    w_error = self.calculate_error(ytrain_b, Wtrain, self.error_type)
-            self.joint_hist.append(self.joint_history(joint, self.nlayer))
-            for k in range(self.nlayer):
-                if not self.neighbors_sample:
-                    neighbors_to_visit = range(len(joint[k]))
-                else:
-                    neighbors_to_visit = self.sort_neighbor(joint[k], self.neighbors_sample)
-                for i in neighbors_to_visit:
-                     self.calculate_neighbors(W,  joint, k, i, Wtrain, train_b,ytrain_b,ep, bias)
-                            
-            error_min_ep = min(self.error_ep_f_hist['error'])
-            ix_min = [i for i,e in enumerate(self.error_ep_f_hist['error']) if e==error_min_ep]
-            runs = [v for i, v in enumerate(self.error_ep_f_hist['ix']) if i in(ix_min)]
-            ix_run = self.error_ep_f_hist['ix'].index(min(runs))
-            joint = self.error_ep_f_hist['joint'][ix_run]
+                train_b, ytrain_b = self.get_batches(self.train,self.ytrain, self.batch, self.train_size)
+            for b in range(self.num_batches):
+                self.error_ep_f_hist={"error":[], "joint":[], "ix":[]}
+                Wtrain = self.run_window_convolve(train_b[b], self.batch, W_matrices, 0, 0, bias)
+                for k in range(self.nlayer):
+                    if not self.neighbors_sample:
+                        neighbors_to_visit = range(len(joint[k]))
+                    else:
+                        neighbors_to_visit = self.sort_neighbor(joint[k], self.neighbors_sample)
+                    for i in neighbors_to_visit:
+                        self.calculate_neighbors(W,  joint, k, i, Wtrain, train_b[b],ytrain_b[b],ep, bias)
+                
+                           
+                error_min_ep = min(self.error_ep_f_hist['error'])
+                ix_min = [i for i,e in enumerate(self.error_ep_f_hist['error']) if e==error_min_ep]
+                runs = [v for i, v in enumerate(self.error_ep_f_hist['ix']) if i in(ix_min)]
+                ix_run = self.error_ep_f_hist['ix'].index(min(runs))
+                joint = self.error_ep_f_hist['joint'][ix_run]
 
+            W_matrices = self.create_w_matrices(W, joint)
+            Wtrain_min,w_error_min =  self.window_error_generate_c(W_matrices, self.train, self.train_size,self.ytrain, self.error_type, 0, 0, bias)
             self.error_ep_f["W_key"].append(self.windows_visit) 
             self.error_ep_f["epoch_w"].append(ep_w) 
             self.error_ep_f["epoch_f"].append(ep) 
-            self.error_ep_f["error"].append(error_min_ep) 
+            self.error_ep_f["error"].append(w_error_min) 
             self.error_ep_f["time"].append((time() -  self.start_time)) 
             for i in range(self.nlayer):
                 self.error_ep_f[f"window_size_{i}"].append(W_size[i])
 
-            if error_min_ep < w_error:
-                w_error = error_min_ep
+            if w_error_min < w_error:
+                w_error = w_error_min
                 joint_min = copy.deepcopy(joint)
                 flg=1
                 epoch_min = ep
@@ -382,7 +399,7 @@ class WOMC:
         W_matrices = self.create_w_matrices(W, joint)
         bias = np.nansum(W, axis=1) - 1
         wv=str(self.windows_visit)
-        if self.batch>=self.train_size:
+        if self.batch==1:
             train_b = copy.deepcopy(self.train)
             ytrain_b = copy.deepcopy(self.ytrain)
             Wtrain,w_error =  self.window_error_generate_c(W_matrices, self.train, self.train_size,self.ytrain, self.error_type, 0, 0, bias)
@@ -442,101 +459,69 @@ class WOMC:
         return (joint, error, epoch_min)
 
 
-    def check_great_neighboors(self, W,joint, ep_w):
-        flg = 0
-        error_ep = {"error_train":[],"error_val":[],"W":[],"joint":[]}
+    def great_neighboors_func(self, w_line_temp_base, i, W, joint, k, ep_w,error_ep, type):
+        W_line_temp = copy.deepcopy(w_line_temp_base)
+        if type == 1:
+            W_line_temp[i] = 1
+        else:
+            W_line_temp[i] = np.nan
+        W_line_temp_NN = copy.deepcopy(W_line_temp)
+        W_line_temp_NN[np.isnan(W_line_temp_NN)] = 0
+        W_line_temp_NN = W_line_temp_NN.astype(int)
+            
+        if ''.join(W_line_temp_NN.astype(str)) in self.windows_continuos:
+            W_temp = copy.deepcopy(W)
+            W_temp[k] = W_line_temp
+            W_h = self.window_history(W_temp, self.nlayer, self.wsize)
+
+            if W_h not in self.w_hist['W']:
+                self.windows_visit+=1
+                joint_temp = copy.deepcopy(joint)
+                joint_temp[k] = self.create_joint(W_temp[k])
+
+                if self.parallel:
+                    joint_temp, w_error, f_epoch_min = self.get_error_window_parallel(W_temp, joint_temp, ep_w)
+                else:
+                    joint_temp, w_error, f_epoch_min = self.get_error_window(W_temp, joint_temp, ep_w)
+                error_ep['error_train'].append(w_error[0])
+                error_ep['error_val'].append(w_error[1])
+                error_ep['W'].append(W_temp)
+                error_ep['joint'].append(joint_temp)
+
+                self.w_hist["W_key"].append(self.windows_visit)
+                self.w_hist["W"].append(W_h)
+                self.w_hist["error"].append(w_error)
+                self.w_hist["f_epoch_min"].append(f_epoch_min)
+        return error_ep
+
+
+    def check_great_neighboors(self, W,joint, ep_w,error_ep):
+        #flg = 0
+        #self.error_ep = {"error_train":[],"error_val":[],"W":[],"joint":[]}
         
         for k in range(self.nlayer):
             nan_idx = np.where(np.isnan(W[k]))[0]
             w_line_temp_base = W[k].copy()
             for i in nan_idx:
-                W_line_temp = copy.deepcopy(w_line_temp_base)
-                W_line_temp[i] = 1
-                W_line_temp_NN = copy.deepcopy(W_line_temp)
-                W_line_temp_NN[np.isnan(W_line_temp_NN)] = 0
-                W_line_temp_NN = W_line_temp_NN.astype(int)
-                    
-                if ''.join(W_line_temp_NN.astype(str)) in self.windows_continuos:
-                    W_temp = copy.deepcopy(W)
-                    W_temp[k] = W_line_temp
-                    W_h = self.window_history(W_temp, self.nlayer, self.wsize)
-
-                    if W_h not in self.w_hist['W']:
-                        self.windows_visit+=1
-                        joint_temp = copy.deepcopy(joint)
-                        joint_temp[k] = self.create_joint(W_temp[k])
-
-                        if self.parallel:
-                            joint_temp, w_error, f_epoch_min = self.get_error_window_parallel(W_temp, joint_temp, ep_w)
-                        else:
-                            joint_temp, w_error, f_epoch_min = self.get_error_window(W_temp, joint_temp, ep_w)
-                        error_ep['error_train'].append(w_error[0])
-                        error_ep['error_val'].append(w_error[1])
-                        error_ep['W'].append(W_temp)
-                        error_ep['joint'].append(joint_temp)
-
-                        self.w_hist["W_key"].append(self.windows_visit)
-                        self.w_hist["W"].append(W_h)
-                        self.w_hist["error"].append(w_error)
-                        self.w_hist["f_epoch_min"].append(f_epoch_min)
-        if error_ep["error_train"]:
-            ix = error_ep['error_val'].index(min(error_ep['error_val']))
-            error_min_ep = np.array([error_ep['error_train'][ix],error_ep['error_val'][ix]])
-            W = error_ep['W'][ix]
-            joint = error_ep['joint'][ix]
-           
-            return W, joint, error_min_ep
-        else:
-            return W, joint, np.array([np.nan, np.nan])
+                error_ep = self.great_neighboors_func(w_line_temp_base, i, W, joint, k,ep_w,error_ep, 1)
+            #with concurrent.futures.ThreadPoolExecutor() as executor:
+            #    [executor.submit(self.great_neighboors_func,w_line_temp_base, i, W, joint, k,ep_w,error_ep, 1) for i in nan_idx]
+        return error_ep
+        
 
 
-    def check_lesser_neighboors(self, W,joint, ep_w):
-        flg = 0
-        error_ep = {"error_train":[],"error_val":[],"W":[],"joint":[]}
+    def check_lesser_neighboors(self, W,joint, ep_w, error_ep):
+        #flg = 0
+        #error_ep = {"error_train":[],"error_val":[],"W":[],"joint":[]}
         
         for k in range(self.nlayer):
             nan_idx = np.where(W[k]==1)[0]
             w_line_temp_base = W[k].copy()
             for i in nan_idx:
-                W_line_temp = copy.deepcopy(w_line_temp_base)
-                W_line_temp[i] = np.nan
-                W_line_temp_NN = copy.deepcopy(W_line_temp)
-                
-                W_line_temp_NN[np.isnan(W_line_temp_NN)] = 0
-                W_line_temp_NN = W_line_temp_NN.astype(int)
-                
-                if ''.join(W_line_temp_NN.astype(str)) in self.windows_continuos:
-                    W_temp = copy.deepcopy(W)
-                    W_temp[k] = W_line_temp
-                    W_h = self.window_history(W_temp, self.nlayer, self.wsize)
-                    
-                    if W_h not in self.w_hist['W']:
-                        self.windows_visit+=1
-                        joint_temp = copy.deepcopy(joint)
-                        joint_temp[k] = self.create_joint(W_temp[k])
-                        
-                        if self.parallel:
-                            joint_temp, w_error, f_epoch_min = self.get_error_window_parallel(W_temp, joint_temp, ep_w)
-                        else:
-                            joint_temp, w_error, f_epoch_min = self.get_error_window(W_temp, joint_temp, ep_w)
-                        error_ep['error_train'].append(w_error[0])
-                        error_ep['error_val'].append(w_error[1])
-                        error_ep['W'].append(W_temp)
-                        error_ep['joint'].append(joint_temp)
-
-                        self.w_hist["W_key"].append(self.windows_visit)
-                        self.w_hist["W"].append(W_h)
-                        self.w_hist["error"].append(w_error)
-                        self.w_hist["f_epoch_min"].append(f_epoch_min)
-       
-        if error_ep["error_train"]:
-            ix = error_ep['error_val'].index(min(error_ep['error_val']))
-            error_min_ep = np.array([error_ep['error_train'][ix],error_ep['error_val'][ix]])
-            W = error_ep['W'][ix]
-            joint = error_ep['joint'][ix]
-            return W, joint, error_min_ep
-        else:
-            return W, joint, np.array([np.nan, np.nan])
+                error_ep = self.great_neighboors_func(w_line_temp_base, i, W, joint, k,ep_w,error_ep, 0)
+            #with concurrent.futures.ThreadPoolExecutor() as executor:
+            #    [executor.submit(self.great_neighboors_func,w_line_temp_base, i, W, joint, k,ep_w,error_ep, 0) for i in nan_idx]
+        return error_ep
 
     def fit(self):
         self.start_time = time()
@@ -570,18 +555,15 @@ class WOMC:
         print(f'Time: {time_min:.2f} | Epoch 0 / {self.epoch_w} - start Validation error: ', error[1])
 
         for ep in range(1,self.epoch_w+1):
-            W_l, joint_l, error_l = self.check_lesser_neighboors(W,joint,ep)
-            W_g, joint_g, error_g = self.check_great_neighboors(W, joint,ep)
+            error_ep_ = {"error_train":[],"error_val":[],"W":[],"joint":[]}
+            error_ep_ = self.check_lesser_neighboors(W,joint,ep,error_ep_)
+            error_ep_ = self.check_great_neighboors(W, joint,ep,error_ep_)
             
-            if (error_l[1] <= error_g[1]) | (np.isnan(error_g[1])):
-                W = copy.deepcopy(W_l)
-                joint = copy.deepcopy(joint_l)
-                error = copy.deepcopy(error_l)
-                
-            elif (error_g[1] < error_l[1]) | (np.isnan(error_g[1])):
-                W = copy.deepcopy(W_g)
-                joint = copy.deepcopy(joint_g)
-                error = copy.deepcopy(error_g)
+            if error_ep_["error_train"]:
+                ix = error_ep_['error_val'].index(min(error_ep_['error_val']))
+                error = np.array([error_ep_['error_train'][ix],error_ep_['error_val'][ix]])
+                W = error_ep_['W'][ix]
+                joint = error_ep_['joint'][ix]
 
             if error[1]<error_min[1]:
                 ep_min = ep
@@ -665,3 +647,36 @@ class WOMC:
         bias = np.nansum(self.W, axis=1) - 1
         Wtrain,w_error =  self.window_error_generate_c(W_matrices, self.train, self.train_size,self.ytrain, self.error_type, 0, 0, bias)
         return Wtrain,w_error, self.W, self.joint
+
+    def test_neightbors(self):
+        start_time = time()
+        error_ep = {"error_train":[],"error_val":[],"W":[],"joint":[]}
+        error_ep = self.check_lesser_neighboors(self.W,self.joint,0, error_ep)
+        print('end of lesser')
+        error_ep = self.check_great_neighboors(self.W, self.joint,0, error_ep)
+        print('end of greater')
+
+        if error_ep["error_train"]:
+            ix = error_ep['error_val'].index(min(error_ep['error_val']))
+            error = np.array([error_ep['error_train'][ix],error_ep['error_val'][ix]])
+            W = error_ep['W'][ix]
+            joint = error_ep['joint'][ix]
+
+        print(f'error_train: ', error[0])
+        print(f'error_val: ', error[1])
+        print(f'W: ', W)
+        end_time = time()
+        time_min = (end_time -  start_time)
+        print(f'Time: {time_min:.2f}')
+    
+    def test_window(self):
+        start = time()
+
+        if self.parallel:
+            _, error,f_epoch_min = self.get_error_window_parallel(self.W,self.joint,0)
+        else:
+            _, error,f_epoch_min = self.get_error_window(self.W,self.joint,0)
+
+        end = time()
+        print('tempo de execução: {}'.format(end - start))
+        print(f'época-min: {f_epoch_min} - com erro: {error}')

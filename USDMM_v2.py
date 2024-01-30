@@ -326,6 +326,7 @@ class WOMC:
         
         self.joint_hist = []
         flg = 0
+        flg_2 = 0
         epoch_min = 0
         W_size = []
         for i in range(self.nlayer):
@@ -348,13 +349,18 @@ class WOMC:
                     for i in neighbors_to_visit:
                         self.calculate_neighbors(W,  joint, k, i, Wtrain, train_b[b],ytrain_b[b],ep, bias)
                 
-                           
-                error_min_ep = min(self.error_ep_f_hist['error'])
-                ix_min = [i for i,e in enumerate(self.error_ep_f_hist['error']) if e==error_min_ep]
-                runs = [v for i, v in enumerate(self.error_ep_f_hist['ix']) if i in(ix_min)]
-                ix_run = self.error_ep_f_hist['ix'].index(min(runs))
-                joint = self.error_ep_f_hist['joint'][ix_run]
+                if self.error_ep_f_hist['error']:
 
+                    error_min_ep = min(self.error_ep_f_hist['error'])
+                    ix_min = [i for i,e in enumerate(self.error_ep_f_hist['error']) if e==error_min_ep]
+                    runs = [v for i, v in enumerate(self.error_ep_f_hist['ix']) if i in(ix_min)]
+                    ix_run = self.error_ep_f_hist['ix'].index(min(runs))
+                    joint = self.error_ep_f_hist['joint'][ix_run]
+                else:
+                    flg_2 = 1
+                    break
+            if flg_2 == 1:
+                break
             W_matrices = self.create_w_matrices(W, joint)
             Wtrain_min,w_error_min =  self.window_error_generate_c(W_matrices, self.train, self.train_size,self.ytrain, self.error_type, 0, 0, bias)
             self.error_ep_f["W_key"].append(self.windows_visit) 

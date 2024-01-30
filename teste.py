@@ -11,8 +11,8 @@ if __name__ == "__main__":
         test_size = 10, # INT -> Number of images to test
         error_type = 'iou', # 'mae' / 'iou' -> type of error
         neighbors_sample = 8, # INT/False -> Number of neighbors to sort
-        epoch_f = 500, # INT -> Number of epochs for the boolean function lattice (fixed windows)
-        epoch_w = 100, # INT -> Number of epochs for the windows lattice
+        epoch_f = 100, # INT -> Number of epochs for the boolean function lattice (fixed windows)
+        epoch_w = 50, # INT -> Number of epochs for the windows lattice
         batch = 1, # INT -> Batch size
         path_results = 'results_V9', # STR -> file where we want to save the results
         name_save='_V9', # STR -> pos fixed name for the results saved

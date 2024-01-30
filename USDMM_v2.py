@@ -324,22 +324,21 @@ class WOMC:
             train_b = [copy.deepcopy(self.train)]
             ytrain_b = [copy.deepcopy(self.ytrain)]
         
-        self.joint_hist = []
+        #self.joint_hist = []
         flg = 0
-        flg_2 = 0
         epoch_min = 0
         W_size = []
         for i in range(self.nlayer):
             W_size.append(np.sum((W[i] == 1)))
         
         Wtrain,w_error =  self.window_error_generate_c(W_matrices, self.train, self.train_size,self.ytrain, self.error_type, 0, 0, bias)
-        self.joint_hist.append(self.joint_history(joint, self.nlayer))
+        #self.joint_hist.append(self.joint_history(joint, self.nlayer))
         for ep in range(self.epoch_f):
             
             if self.batch<self.train_size:
                 train_b, ytrain_b = self.get_batches(self.train,self.ytrain, self.batch, self.train_size)
             for b in range(self.num_batches):
-                self.error_ep_f_hist={"error":[], "joint":[], "ix":[]}
+                error_ep_f_hist={"error":[], "joint":[], "ix":[]}
                 Wtrain = self.run_window_convolve(train_b[b], self.batch, W_matrices, 0, 0, bias)
                 for k in range(self.nlayer):
                     if not self.neighbors_sample:
@@ -347,20 +346,14 @@ class WOMC:
                     else:
                         neighbors_to_visit = self.sort_neighbor(joint[k], self.neighbors_sample)
                     for i in neighbors_to_visit:
-                        self.calculate_neighbors(W,  joint, k, i, Wtrain, train_b[b],ytrain_b[b],ep, bias)
-                
-                if self.error_ep_f_hist['error']:
+                        error_ep_f_hist = self.calculate_neighbors(W,  joint, k, i, Wtrain, train_b[b],ytrain_b[b],ep, bias, error_ep_f_hist)
 
-                    error_min_ep = min(self.error_ep_f_hist['error'])
-                    ix_min = [i for i,e in enumerate(self.error_ep_f_hist['error']) if e==error_min_ep]
-                    runs = [v for i, v in enumerate(self.error_ep_f_hist['ix']) if i in(ix_min)]
-                    ix_run = self.error_ep_f_hist['ix'].index(min(runs))
-                    joint = self.error_ep_f_hist['joint'][ix_run]
-                else:
-                    flg_2 = 1
-                    break
-            if flg_2 == 1:
-                break
+                error_min_ep = min(error_ep_f_hist['error'])
+                ix_min = [i for i,e in enumerate(error_ep_f_hist['error']) if e==error_min_ep]
+                runs = [v for i, v in enumerate(error_ep_f_hist['ix']) if i in(ix_min)]
+                ix_run = error_ep_f_hist['ix'].index(min(runs))
+                joint = error_ep_f_hist['joint'][ix_run]
+
             W_matrices = self.create_w_matrices(W, joint)
             Wtrain_min,w_error_min =  self.window_error_generate_c(W_matrices, self.train, self.train_size,self.ytrain, self.error_type, 0, 0, bias)
             self.error_ep_f["W_key"].append(self.windows_visit) 
@@ -386,20 +379,21 @@ class WOMC:
         error = np.array([w_error, error_val])
         return (joint, error, epoch_min)
 
-    def calculate_neighbors(self,W,  joint, k, i, Wlast, img,yimg, ep, bias):
+    def calculate_neighbors(self,W,  joint, k, i, Wlast, img,yimg, ep, bias, error_ep_f_hist):
         joint_temp = copy.deepcopy(joint)
         if joint[k][i][1] == '1':
             joint_temp[k][i][1] = '0'
         else:
             joint_temp[k][i][1] = '1'
-        j_temp = self.joint_history(joint_temp, self.nlayer)
-        if j_temp not in self.joint_hist:
-            self.joint_hist.append(j_temp)
-            W_matrices = self.create_w_matrices(W, joint_temp)
-            _,error_hood = self.window_error_generate_c(W_matrices, img, self.batch, yimg, self.error_type, Wlast, k, bias)
-            self.error_ep_f_hist["error"].append(error_hood)
-            self.error_ep_f_hist["joint"].append(joint_temp)
-            self.error_ep_f_hist["ix"].append(str(k)+str(i))         
+        #j_temp = self.joint_history(joint_temp, self.nlayer)
+        #if j_temp not in self.joint_hist:
+            #self.joint_hist.append(j_temp)
+        W_matrices = self.create_w_matrices(W, joint_temp)
+        _,error_hood = self.window_error_generate_c(W_matrices, img, self.batch, yimg, self.error_type, Wlast, k, bias)
+        error_ep_f_hist["error"].append(error_hood)
+        error_ep_f_hist["joint"].append(joint_temp)
+        error_ep_f_hist["ix"].append(str(k)+str(i))
+        return error_ep_f_hist         
 
     def get_error_window_parallel(self,W, joint, ep_w):
         W_matrices = self.create_w_matrices(W, joint)

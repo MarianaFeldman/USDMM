@@ -8,6 +8,7 @@ import copy
 from time import sleep, time
 import pickle
 import concurrent.futures
+from concurrent.futures import ProcessPoolExecutor
 import os
 import pandas as pd
 
@@ -396,19 +397,93 @@ class WOMC:
         return error_ep_f_hist         
 
     def get_error_window_parallel(self,W, joint, ep_w):
+
         W_matrices = self.create_w_matrices(W, joint)
         bias = np.nansum(W, axis=1) - 1
-        wv=str(self.windows_visit)
-        if self.batch==1:
-            train_b = copy.deepcopy(self.train)
-            ytrain_b = copy.deepcopy(self.ytrain)
-            Wtrain,w_error =  self.window_error_generate_c(W_matrices, self.train, self.train_size,self.ytrain, self.error_type, 0, 0, bias)
-        self.joint_hist = []
+
+        if self.batch>=self.train_size:
+            train_b = [copy.deepcopy(self.train)]
+            ytrain_b = [copy.deepcopy(self.ytrain)]
+        
+        #self.joint_hist = []
         flg = 0
         epoch_min = 0
         W_size = []
         for i in range(self.nlayer):
             W_size.append(np.sum((W[i] == 1)))
+        
+        Wtrain,w_error =  self.window_error_generate_c(W_matrices, self.train, self.train_size,self.ytrain, self.error_type, 0, 0, bias)
+        #self.joint_hist.append(self.joint_history(joint, self.nlayer))
+        for ep in range(self.epoch_f):
+            #print('----------------------------')
+            #print('ep: ', ep)
+            if self.batch<self.train_size:
+                train_b, ytrain_b = self.get_batches(self.train,self.ytrain, self.batch, self.train_size)
+            for b in range(self.num_batches):
+                #print('b: ', b)
+                error_ep_f_hist={"error":[], "joint":[], "ix":[]}
+                Wtrain = self.run_window_convolve(train_b[b], self.batch, W_matrices, 0, 0, bias)
+                for k in range(self.nlayer):
+                    if not self.neighbors_sample:
+                        neighbors_to_visit = range(len(joint[k]))
+                    else:
+                        neighbors_to_visit = self.sort_neighbor(joint[k], self.neighbors_sample)
+                    #for i in neighbors_to_visit:
+                    #    error_ep_f_hist = self.calculate_neighbors(W,  joint, k, i, Wtrain, train_b[b],ytrain_b[b],ep, bias, error_ep_f_hist)
+
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                    #with ProcessPoolExecutor() as executor:
+                        futures = [executor.submit(self.calculate_neighbors,W,  joint, k, i, Wtrain, train_b[b],ytrain_b[b],ep, bias, error_ep_f_hist) for i in neighbors_to_visit]
+                    
+                    for future in concurrent.futures.as_completed(futures):
+                        #result = future.result()
+                        error_ep_f_hist = future.result()
+                        #error_ep_f_hist["error"].append(result["error"][0])
+                        #error_ep_f_hist["joint"].append(result["joint"][0])
+                        #error_ep_f_hist["ix"].append(result["ix"][0])
+                        #if ep ==0:
+                            #print('ix: ', error_ep_f_hist['ix'])
+                            #print('error: ', error_ep_f_hist['error'])
+                            #print('joint: ', error_ep_f_hist['joint'])
+                    #print('------')
+                    #print('ix: ', error_ep_f_hist['ix'])
+                    #print('error: ', error_ep_f_hist['error'])
+                error_min_ep = min(error_ep_f_hist['error'])
+                #print('error_min_ep: ', error_min_ep)
+                ix_min = [i for i,e in enumerate(error_ep_f_hist['error']) if e==error_min_ep]
+                #print('ix_min: ', ix_min)
+                runs = [v for i, v in enumerate(error_ep_f_hist['ix']) if i in(ix_min)]
+                ix_run = error_ep_f_hist['ix'].index(min(runs))
+                joint = error_ep_f_hist['joint'][ix_run]
+
+                
+                
+
+            W_matrices = self.create_w_matrices(W, joint)
+            Wtrain_min,w_error_min =  self.window_error_generate_c(W_matrices, self.train, self.train_size,self.ytrain, self.error_type, 0, 0, bias)
+            self.error_ep_f["W_key"].append(self.windows_visit) 
+            self.error_ep_f["epoch_w"].append(ep_w) 
+            self.error_ep_f["epoch_f"].append(ep) 
+            self.error_ep_f["error"].append(w_error_min) 
+            self.error_ep_f["time"].append((time() -  self.start_time)) 
+            for i in range(self.nlayer):
+                self.error_ep_f[f"window_size_{i}"].append(W_size[i])
+
+            if w_error_min < w_error:
+                w_error = w_error_min
+                joint_min = copy.deepcopy(joint)
+                flg=1
+                epoch_min = ep
+
+            if (ep-epoch_min)>self.early_stop_round_f :
+                break
+        if flg==1:
+            joint = copy.deepcopy(joint_min)
+        W_matrices = self.create_w_matrices(W, joint)
+        _,error_val =  self.window_error_generate_c(W_matrices, self.val, self.val_size, self.yval, self.error_type, self.val, 0, bias)
+        error = np.array([w_error, error_val])
+        return (joint, error, epoch_min)
+
         for ep in range(1,self.epoch_f+1):
             
             self.error_ep_f_hist={"error":[], "joint":[], "ix":[]}

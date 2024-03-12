@@ -484,55 +484,6 @@ class WOMC:
         error = np.array([w_error, error_val])
         return (joint, error, epoch_min)
 
-        for ep in range(1,self.epoch_f+1):
-            
-            self.error_ep_f_hist={"error":[], "joint":[], "ix":[]}
-            if self.batch<self.train_size:
-                train_b, ytrain_b = self.sort_images(self.train,self.ytrain, self.batch, self.train_size)
-                #Wtrain,w_error_b,_ =  self.window_error_generate(W, joint, train_b, self.batch, ytrain_b, self.error_type, self.train, 0)
-                Wtrain = self.run_window_convolve(train_b, self.batch, W_matrices, 0, 0, bias)
-                if ep==1:
-                    w_error = self.calculate_error(ytrain_b, Wtrain, self.error_type)
-            self.joint_hist.append(self.joint_history(joint, self.nlayer))
-            for k in range(self.nlayer):
-                if not self.neighbors_sample:
-                    neighbors_to_visit = range(len(joint[k]))
-                else:
-                    neighbors_to_visit = self.sort_neighbor(joint[k], self.neighbors_sample)
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    [executor.submit(self.calculate_neighbors,W,  joint, k, i, Wtrain, train_b,ytrain_b,ep, bias) for i in neighbors_to_visit]
-            error_min_ep = min(self.error_ep_f_hist['error'])
-            ix_min = [i for i,e in enumerate(self.error_ep_f_hist['error']) if e==error_min_ep]
-            runs = [v for i, v in enumerate(self.error_ep_f_hist['ix']) if i in(ix_min)]
-            ix_run = self.error_ep_f_hist['ix'].index(min(runs))
-            joint = self.error_ep_f_hist['joint'][ix_run]
-
-            self.error_ep_f["W_key"].append(self.windows_visit) 
-            self.error_ep_f["epoch_w"].append(ep_w) 
-            self.error_ep_f["epoch_f"].append(ep) 
-            self.error_ep_f["error"].append(error_min_ep) 
-            self.error_ep_f["time"].append((time() -  self.start_time)) 
-            for i in range(self.nlayer):
-                self.error_ep_f[f"window_size_{i}"].append(W_size[i]) 
-
-            if error_min_ep < w_error:
-                w_error = copy.deepcopy(error_min_ep)
-                joint_min = copy.deepcopy(joint)
-                flg=1
-                epoch_min = ep 
-            
-            if (ep-epoch_min)>self.early_stop_round_f :
-                break
-
-        if flg==1:
-            joint = copy.deepcopy(joint_min)
-            
-        W_matrices = self.create_w_matrices(W, joint)
-        _,error_val =  self.window_error_generate_c(W_matrices, self.val, self.val_size, self.yval, self.error_type, self.val, 0, bias)
-        
-        error = np.array([w_error, error_val])
-        return (joint, error, epoch_min)
-
 
     def great_neighboors_func(self, w_line_temp_base, i, W, joint, k, ep_w,error_ep, type):
         W_line_temp = copy.deepcopy(w_line_temp_base)

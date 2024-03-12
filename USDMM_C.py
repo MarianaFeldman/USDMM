@@ -214,10 +214,10 @@ class WOMC:
                 if layer > i:
                     Wsample_k.append(Wlast[i][k])
                 elif i==0:
-                   Wsample_k.append(self.apply_convolve_sc(sample_b[k], W_matrices[i], bias[i]))
+                   Wsample_k.append(self.apply_convolve(sample_b[k], W_matrices[i], bias[i]))
                     #Wsample_k.append(self.apply_convolve_sc2(sample_b[k], cupy_kernel, bias[i]))
                 else:
-                    Wsample_k.append(self.apply_convolve_sc(Wsample_b[k], W_matrices[i], bias[i]))
+                    Wsample_k.append(self.apply_convolve(Wsample_b[k], W_matrices[i], bias[i]))
                     #Wsample_k.append(self.apply_convolve_sc2(Wsample_b[k], cupy_kernel, bias[i]))
 
             Wsample_b = np.pad(Wsample_k, ((0, 0), (self.increase, self.increase), (self.increase, self.increase)), mode='constant', constant_values=-1)

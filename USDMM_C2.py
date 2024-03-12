@@ -37,8 +37,6 @@ class WOMC:
         self.num_batches = train_size // batch
         self.windows_continuos = np.load('./data/windows_continuos.txt', allow_pickle=True)
         self.increase = int(round(wlen/2-0.1,0))
-        #self.count = 0
-        #self.random_list = self.randon_seed_number(seed)
         random.seed(seed)
         np.random.seed(seed)
         
@@ -88,10 +86,6 @@ class WOMC:
         self.start_time = 0
         print('------------------------------------------------------------------')
 
-    def randon_seed_number(self, s):
-        random.seed(s)
-        n_ep = (self.epoch_f*self.epoch_w)*200+len(self.windows_continuos)*2
-        random_numbers = random.sample(range(0, 1000000000), n_ep)
 
         return random_numbers
 
@@ -100,8 +94,6 @@ class WOMC:
         ni = int(W[~np.isnan(W)].sum())
         for i in itertools.product([0, 1], repeat=ni):
             Ji.append(''.join(np.array(i).astype(str)))
-        #np.random.seed(self.random_list[self.count])
-        #self.count +=1
         return np.c_[Ji, np.random.randint(2, size=len(Ji))]
     
     def _convert_binary(self,img):
@@ -170,7 +162,6 @@ class WOMC:
         return (error/n_samples) 
     
     def get_batches(self, imgX,imgY, batch_size, img_size):
-        #np.random.seed(self.random_list[self.count])
         np.random.shuffle(imgX)
         np.random.shuffle(imgY)
         num_batches = img_size // batch_size
@@ -261,9 +252,7 @@ class WOMC:
                     if (not self.neighbors_sample) | (self.neighbors_sample>=len(joint[k])):
                         neighbors_to_visit = range(len(joint[k]))
                     else:
-                        #random.seed(self.random_list[self.count])
                         neighbors_to_visit = random.sample(range(len(joint[k])), self.neighbors_sample)
-                        #self.count+=1
                         
                     for nv in neighbors_to_visit: 
                         error_ep_f_hist.append(self.calculate_neighbors(W,  joint, k, Wtrain, train_b[b],ytrain_b[b],bias, nv))
@@ -324,9 +313,7 @@ class WOMC:
                     if (not self.neighbors_sample) | (self.neighbors_sample>=len(joint[k])):
                         neighbors_to_visit = range(len(joint[k]))
                     else:
-                        #random.seed(self.random_list[self.count])
                         neighbors_to_visit = random.sample(range(len(joint[k])), self.neighbors_sample)
-                        #self.count+=1
 
                     with concurrent.futures.ThreadPoolExecutor() as executor:
                         fixed_params_func = lambda neighbor: self.calculate_neighbors(W,  joint, k, Wtrain, train_b[b],ytrain_b[b],bias, neighbor)
@@ -372,9 +359,7 @@ class WOMC:
                 neighbors_to_visit.extend(range(sublist_length))
                 ix.extend([k] * sublist_length)
             else:
-                #random.seed(self.random_list[self.count])
                 sample_indices = random.sample(range(sublist_length), self.neighbors_sample)
-                #self.count+=1
                 neighbors_to_visit.extend(sample_indices)
                 ix.extend([k] * len(sample_indices))
         return neighbors_to_visit, ix
@@ -733,7 +718,6 @@ class WOMC:
     
 
     def create_window(self):
-       # random.seed(self.random_list[0])
         wind =  random.randint(0, len(self.windows_continuos)-1)
         W = np.array([1. if i=='1' else np.nan for i in self.windows_continuos[wind]])
         return W

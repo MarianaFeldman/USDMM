@@ -381,20 +381,20 @@ class WOMC:
             W_matrices = self.create_w_matrices(W, joint_temp)
             _,error_hood = self.window_error_generate_c(W_matrices, img, self.batch, yimg, self.error_type, Wlast, k, bias)
             ##
-            self.error_ep_f_hist["error"].append(error_hood)
-            self.error_ep_f_hist["joint"].append(joint_temp)
-            self.error_ep_f_hist["ix"].append(str(k)+str(i))
+            #self.error_ep_f_hist["error"].append(error_hood)
+            #self.error_ep_f_hist["joint"].append(joint_temp)
+            #self.error_ep_f_hist["ix"].append(str(k)+str(i))
 
             #error_ep_f_hist["error"].append(error_hood)
             #error_ep_f_hist["joint"].append(joint_temp)
             #error_ep_f_hist["ix"].append(str(k)+str(i))
             #print(f'error: {error_hood}')
-            #return [error_hood,joint_temp, str(k)+str(i)]
-        #else:
+            return [error_hood,joint_temp, str(k)+str(i)]
+        else:
          #   self.error_ep_f_hist["error"].append(np.inf)
           #  self.error_ep_f_hist["joint"].append(np.nan)
            # self.error_ep_f_hist["ix"].append(str(k)+str(i))
-            #return [np.inf ,np.nan ,np.inf ]     
+            return [np.inf ,np.nan ,np.inf ]     
 
     def get_error_window_parallel(self,W, joint, ep_w):
         W_matrices = self.create_w_matrices(W, joint)

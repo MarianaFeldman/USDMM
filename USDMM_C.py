@@ -18,8 +18,8 @@ from itertools import product
 from scipy.signal import convolve2d
 
 
-import cupy as cp
-from cupyx.scipy.signal import convolve2d as convolve2d_gpu
+#import cupy as cp
+#from cupyx.scipy.signal import convolve2d as convolve2d_gpu
 
 
 class WOMC:
@@ -71,9 +71,9 @@ class WOMC:
         self.val, self.yval = np.array(self.get_images(val_size, 'val'))
         self.test, self.ytest = np.array(self.get_images(test_size, 'test'))
 
-        self.cp_train = cp.array(self.train)
-        self.cp_val = cp.array(self.train)
-        self.cp_test = cp.array(self.train)
+        #self.cp_train = cp.array(self.train)
+        #self.cp_val = cp.array(self.train)
+        #self.cp_test = cp.array(self.train)
 
         self.path_results = path_results
         isExist = os.path.exists(path_results)
@@ -263,18 +263,7 @@ class WOMC:
         np.place(img_c, img_c == 0, -1)
         return img_c[self.increase:img_r.shape[0]-self.increase, self.increase:img_r.shape[1]-self.increase]
 
-    def apply_convolve_sc2(self, img, W_matrices, bias):
-        #img_c = np.zeros([img.shape[0]-2*self.increase, img.shape[1]-2*self.increase], dtype=float)
-        img_c = np.zeros_like(img, dtype=float)
-        cp_img = cp.array(img)
-        for kernel in W_matrices:
-            #img_b = cv2.copyMakeBorder(img, self.increase, self.increase, self.increase, self.increase, cv2.BORDER_CONSTANT, None, value = -1) 
-            #img_b = np.pad(img, ((self.increase, self.increase), (self.increase, self.increase)), mode='constant', constant_values=-1)
-            img_r = convolve2d_gpu(cp_img, kernel, mode='same').get()-bias
-            np.maximum(img_r, 0, out=img_r)
-            img_c += img_r
-        np.place(img_c, img_c == 0, -1)
-        return img_c[self.increase:img_r.shape[0]-self.increase, self.increase:img_r.shape[1]-self.increase]
+
 
 
     def apply_convolve2(self, img, W_matrices, bias):

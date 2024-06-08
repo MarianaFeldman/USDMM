@@ -1,0 +1,6 @@
+jax
+jaxlib
+numpy
+opencv-python
+pandas
+argparse

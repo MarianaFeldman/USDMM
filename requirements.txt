@@ -4,3 +4,6 @@ numpy
 opencv-python
 pandas
 argparse
+keras
+tensorflow
+scikit-learn

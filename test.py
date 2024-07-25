@@ -58,19 +58,21 @@ def run_experiments(base_config, results_dir, run):
 
     all_results = []
 
-    for seed in range(5):  # Rodar 10 vezes com diferentes seeds
+    for seed in range(7):  # Rodar 10 vezes com diferentes seeds
         config['seed'] = seed
         config['path_results'] = f'results_run{run}_V{seed}'
         result, total_time, min_train_error, min_val_error, min_test_error = run_training(config, seed)
         result_df = pd.DataFrame(result)
         result_df['seed'] = seed
         result_df['path_results'] =  f'results_run{run}_V{seed}'
+        result_df['time'] = total_time
         all_results.append(result_df)
 
         total_times.append(total_time)
         min_train_errors.append(min_train_error)
         min_val_errors.append(min_val_error)
         min_test_errors.append(min_test_error)
+        result_df.to_csv(f"{results_dir}/results_run{run}_V{seed}.csv", index=False)
 
     combined_results = pd.concat(all_results)
     combined_results.to_csv(f"/{results_dir}/results_run{run}.csv", index=False)
@@ -125,8 +127,8 @@ def main():
         'path_results': 'results_V1',
         'name_save': '_V5',
         'seed': 0,
-        'early_stop_round_f': 20,
-        'early_stop_round_w': 10,
+        'early_stop_round_f': 30,
+        'early_stop_round_w': 20,
         'w_ini': [0, 1, 0, 1, 1, 1, 0, 1, 0]
     }
 

@@ -9,14 +9,30 @@ import pickle
 import os
 import cv2
 from itertools import product
+import USDMM_data
 
-work_directory = 'app'
+#directory for colab
+#work_directory = '.'
+#work_output = 'output_colab' 
+
+#directory for linux
+work_directory = '/app/'
+work_output = f'{work_directory}output' 
 
 class WOMC_JAX:
 
-    def __init__(self, nlayer, wlen, train_size, val_size, test_size, error_type,
-                 neighbors_sample_f, neighbors_sample_w, epoch_f, epoch_w, batch, path_results, name_save, seed,
+    def __init__(self, nlayer, wlen, train_size, val_size, test_size, img_type,
+                 error_type, neighbors_sample_f, neighbors_sample_w, epoch_f, epoch_w, 
+                 batch, path_results, name_save, seed,
                  early_stop_round_f , early_stop_round_w, w_ini):
+                 #train_img, train_yimg, val_img, val_yimg, test_img, test_yimg):
+
+        WOMC_IMG = USDMM_data.WOMC_load_images(
+            train_size = train_size,
+            val_size = val_size,
+            test_size = test_size,
+            img_type = img_type
+        )
 
         self.nlayer = nlayer
         self.wlen = wlen
@@ -26,16 +42,16 @@ class WOMC_JAX:
         self.k_ix = k_grid.flatten().astype(jnp.int8)
         self.i_ix = i_grid.flatten().astype(jnp.int8)
         self.identity_matrix = jnp.eye(self.wsize, dtype=jnp.int8)
-        self.train_size = train_size
-        self.val_size = val_size
-        self.test_size = test_size
+        self.train_size = WOMC_IMG.train_size
+        self.val_size = WOMC_IMG.val_size
+        self.test_size = WOMC_IMG.test_size
         self.error_type = error_type
         self.neighbors_sample_f = neighbors_sample_f
         self.neighbors_sample_w = neighbors_sample_w
         self.epoch_f = epoch_f
         self.epoch_w = epoch_w
         self.batch = batch
-        self.num_batches = train_size // batch
+        self.num_batches = WOMC_IMG.train_size // batch
         self.windows_continuos = self.load_or_generate_matrices(self.wlen) #jnp.load('./data/window_continuous_array.txt', allow_pickle=True).astype(jnp.int8)
         #self.dict_matrices = self.create_w_matrices_dict(self.windows_continuos, self.wlen)
         self.increase = int(round(wlen/2-0.1,0))
@@ -52,34 +68,40 @@ class WOMC_JAX:
         wind_size_dict = {f'window_size_{i}': [] for i in range(self.nlayer)}
         self.error_ep_f = {key: value for d in [self.error_ep_f, wind_size_dict] for key, value in d.items()}
 
-        self.train, self.ytrain = np.array(self.get_images(train_size, 'train'))
-        self.val, self.yval = np.array(self.get_images(val_size, 'val'))
-        self.test, self.ytest = np.array(self.get_images(test_size, 'test'))
+        self.jax_train = jnp.array(WOMC_IMG.jax_train).astype(jnp.int8)
+        self.jax_ytrain = jnp.array(WOMC_IMG.jax_ytrain).astype(jnp.int8)
 
-        self.jax_train = jnp.array(self.train).astype(jnp.int8)
-        self.jax_ytrain = jnp.array(self.ytrain).astype(jnp.int8)
+        self.jax_val = jnp.array(WOMC_IMG.jax_val).astype(jnp.int8)
+        self.jax_yval = jnp.array(WOMC_IMG.jax_yval).astype(jnp.int8)
 
-        self.jax_val = jnp.array(self.val).astype(jnp.int8)
-        self.jax_yval = jnp.array(self.yval).astype(jnp.int8)
+        self.jax_test = jnp.array(WOMC_IMG.jax_test).astype(jnp.int8)
+        self.jax_ytest = jnp.array(WOMC_IMG.jax_ytest).astype(jnp.int8)
 
-        self.jax_test = jnp.array(self.test).astype(jnp.int8)
-        self.jax_ytest = jnp.array(self.ytest).astype(jnp.int8)
+        img_h, img_w = self.jax_train[0].shape
 
+        # Calcular o índice do elemento central
+        self.ci_h = img_h // 2
+        self.ci_w = img_w // 2
 
         self.path_results = path_results
-        path_file_name = f'/{work_directory}/output/{path_results}'
+        path_file_name = f'{work_output}'
         isExist = os.path.exists(path_file_name)
         if not isExist:
             os.makedirs(path_file_name)
-        path_file_name = f'/{work_directory}/output/{path_results}/run'
+        path_file_name = f'{work_output}/{path_results}'
         isExist = os.path.exists(path_file_name)
         if not isExist:
             os.makedirs(path_file_name)
-        path_file_name = f'/{work_directory}/output/{path_results}/trained'
+        path_file_name = f'{work_output}/{path_results}/run'
         isExist = os.path.exists(path_file_name)
         if not isExist:
             os.makedirs(path_file_name)
-        print("Resultados serão salvos em ",path_results)
+        path_file_name = f'{work_output}/{path_results}/trained'
+        isExist = os.path.exists(path_file_name)
+        if not isExist:
+            os.makedirs(path_file_name)
+        print(f"Resultados serão salvos em {work_output}/{path_results}")
+        print(f'Dataset shape: Train = {self.jax_train.shape} / Val = {self.jax_val.shape} / Test = {self.jax_test.shape}')
         self.name_save = name_save
 
         self.joint_hist = []
@@ -94,23 +116,6 @@ class WOMC_JAX:
         # Inicializando o timer
         self.start_time = 0
         print('------------------------------------------------------------------')
-    
-    def _convert_binary(self, img):
-        (_, img_bin) = cv2.threshold(img, 100, 255, cv2.THRESH_BINARY)
-        img_bin = img_bin.astype('float64')
-        img_bin[(img_bin==0)]=1
-        img_bin[(img_bin==255)]=-1
-        return img_bin
-
-    def get_images(self, img_size, img_type):
-        ximg = []
-        yimg = []
-        for img in range(1,img_size+1):
-            x = cv2.imread(f'/{work_directory}/data/x/{img_type}{img:02d}.jpg', cv2.IMREAD_GRAYSCALE)
-            y = cv2.imread(f'/{work_directory}/data/y/{img_type}{img:02d}.jpg', cv2.IMREAD_GRAYSCALE)
-            ximg.append(self._convert_binary(x))
-            yimg.append(self._convert_binary(y))
-        return ximg, yimg
     
     # Create continuous matrices file
     def is_connected(self, matrix):
@@ -160,7 +165,7 @@ class WOMC_JAX:
 
 
     def load_or_generate_matrices(self, wlen):
-        filename = f'/{work_directory}/data/window_continuous_wlen{wlen}.txt'
+        filename = f'./data/window_continuous_wlen{wlen}.txt'
         
         if os.path.exists(filename):
             continuous_matrices = jnp.load(filename, allow_pickle=True).astype(jnp.int8)
@@ -179,7 +184,7 @@ class WOMC_JAX:
         return matrix_k
     
     def create_w_matrices_dict(self, windows_continuos, wlen):
-        filename = f'/{work_directory}/data/dict_matrices_wlen{wlen}.txt'
+        filename = f'./data/dict_matrices_wlen{wlen}.txt'
         if os.path.exists(filename):
           dict_matrices = jnp.load(filename, allow_pickle=True)
         else:
@@ -197,11 +202,11 @@ class WOMC_DATA:
     def __init__(self, **kwargs):
 
         self.data = kwargs
-        with open(f'/{work_directory}/data/parameters.pkl', 'wb') as file:
+        with open('./data/parameters.pkl', 'wb') as file:
             pickle.dump(self.data, file)
     
 def load_from_file():
-    with open(f'/{work_directory}/data/parameters.pkl', 'rb') as file:
+    with open('./data/parameters.pkl', 'rb') as file:
         data = pickle.load(file)
     return data
 

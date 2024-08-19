@@ -197,7 +197,7 @@ def IoU(y, h):
     return error
 
 def window_error_generate(W_matrices, sample, y, layer, bias):
-    W_hood = run_window_convolve_jax(sample, W_matrices, layer, bias)
+    W_hood = run_window_convolve_jax(sample, W_matrices, bias)
     error_hood = IoU(y, W_hood)
     return W_hood,error_hood
 window_error_generate_train = jax.jit(window_error_generate)
@@ -524,12 +524,14 @@ def fit():
     error_min = copy.deepcopy(error)
     W_min = copy.deepcopy(W)
     joint_min = copy.deepcopy(joint)
-    error_ep = {"epoch":[],"error_train":[], "error_val":[]}
+    error_ep = {"epoch":[],"error_train":[], "error_val":[], "ep_time":[]}
     error_ep['epoch'].append(0)
     error_ep['error_train'].append(error[0])
     error_ep['error_val'].append(error[1])
+
     
     time_min = (time() -  WOMC.start_time) / 60
+    error_ep['ep_time'].append(time_min)
     print(f'Time: {time_min:.2f} | Epoch 0 / {WOMC.epoch_w} - start Validation error: {error[1]:.4f}')
     for ep in range(1,WOMC.epoch_w+1):
         error, W, joint, joint_shape, Wtrain, Wval = check_neighboors(W,joint,joint_shape, ep)
@@ -559,6 +561,7 @@ def fit():
         error_ep['error_train'].append(error[0])
         error_ep['error_val'].append(error[1])
         time_min = (time() -  WOMC.start_time) / 60
+        error_ep['ep_time'].append(time_min)
         print(f'Time: {time_min:.2f} | Epoch {ep} / {WOMC.epoch_w} - Validation error: {error[1]:.4f} | Min-Epoch {ep_min}')
         if (ep-ep_min)>WOMC.early_stop_round_w :
             print('End by Early Stop Round')
@@ -579,7 +582,7 @@ def fit():
     time_min = (end_time -  WOMC.start_time) / 60
     print(f'Total Time: {time_min:.2f} minutes| Min-Epoch {ep_min} - Train error: {error_train:.4f} / Validation error: {error_val:.4f} / Test error: {error_test:.4f}')
 
-    save_window(joint,joint_shape, W)
+    save_window(joint_min,joint_shape_min, W_min)
     save_results_complet(Wtrain_min, Wval_min, Wtest)
     pickle.dump(WOMC.w_hist, open(f'{work_output}/{WOMC.path_results}/W_hist{WOMC.name_save}.txt', 'wb'))
     pickle.dump(error_ep, open(f'{work_output}/{WOMC.path_results}/error_ep_w{WOMC.name_save}.txt', 'wb'))

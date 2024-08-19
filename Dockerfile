@@ -16,8 +16,11 @@ RUN pip install -r /app/requirements.txt
 
 # Set the entrypoint to use the virtual environment's Python
 #ENTRYPOINT ["/jaxenv/bin/python", "/app/main.py"]
-#ENTRYPOINT ["python3", "/app/test_mnist.py"]
-ENTRYPOINT ["python3", "/app/apply_mnist.py"]
+#ENTRYPOINT ["python3", "/app/test.py"]
+ENTRYPOINT ["python3", "/app/test_mnist.py"]
+#ENTRYPOINT ["python3", "/app/apply_mnist2.py"]
+#ENTRYPOINT ["python3", "/app/test_gol.py"]
+#ENTRYPOINT ["python3", "/app/test_gol_fixed.py"]
 #ENTRYPOINT ["python3", "/app/dictmatrices.py"]
 CMD []
 

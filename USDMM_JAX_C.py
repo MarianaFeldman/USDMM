@@ -182,6 +182,24 @@ def run_window_convolve(sample,y, W_matrices,bias):
     return W_hood, error_hood
 run_window_convolve_jit = jax.jit(run_window_convolve)
 
+def run_window_convolve_complet(sample,y, W_matrices, layer,bias):
+    sample_b = jnp.pad(sample, ((0, 0), (WOMC.increase, WOMC.increase), (WOMC.increase, WOMC.increase)), mode='constant', constant_values=-1)
+    Wsample_k=[]
+    Wsample=[]
+    for i in range(WOMC.nlayer):
+        for img in sample_b:
+          img_c = jnp.sum(convolve_kernel_vmap(img,W_matrices[i], bias[i]), axis=0, dtype=jnp.int8)
+          img_c = jnp.where(img_c == 0, jnp.int8(-1), img_c)
+          Wsample_k.append(img_c[WOMC.increase:img_c.shape[0]-WOMC.increase, WOMC.increase:img_c.shape[1]-WOMC.increase].astype(jnp.int8))
+
+        sample_b = jnp.pad(jnp.array(Wsample_k), ((0, 0), (WOMC.increase, WOMC.increase), (WOMC.increase, WOMC.increase)), mode='constant', constant_values=-1)
+        Wsample.append(Wsample_k)
+    W_hood_complet = jnp.array(Wsample)
+    W_hood = W_hood_complet[-1][:, WOMC.ci_h, WOMC.ci_w]
+    error_hood = MSE(y, W_hood)
+    return W_hood_complet,W_hood, error_hood
+run_window_convolve_complet_jit = jax.jit(run_window_convolve_complet)
+
 # Calcular o erro
 def MSE(true,pred):
   #pred_ = pred[-1][:, WOMC.ci_h, WOMC.ci_w]
@@ -402,7 +420,7 @@ def get_error_fixed_window(W, joint, joint_shape, j_rand):
     save_window_fixed(joint,joint_shape, W)
     save_results_complet_fixed(W_train, W_val,W_test )
     total_time = (time() - start_time_g)/60
-    return error_ep_f, error, joint, total_time
+    return error_ep_f, error, joint, total_time, epoch_min, ep
     #return joint, error, epoch_min, W_train, W_val
 
 @jax.jit
@@ -515,11 +533,15 @@ def check_neighboors(W,joint,joint_shape, ep_w):
     W_val = W_val_list[ix_error]
     return W_error, W_min, joint_min, joint_shape_min, W_train, W_val
 
-def fit():
+def fit(W=None):
     WOMC.start_time = time()
 
     #Wini = jnp.array([0, 1, 0, 1, 1, 1, 0, 1, 0]).astype(jnp.int8)
-    W = jnp.array([WOMC.w_ini.copy() for _ in range(WOMC.nlayer)])
+    if W is None:
+        W = jnp.array([WOMC.w_ini.copy() for _ in range(WOMC.nlayer)])
+    else:
+        print('Learning with W')
+
     max_w = jnp.max(jnp.sum(W, axis=1))
     WOMC.joint_max_size = 2**max_w.item()
     joint,joint_shape = create_joint(W)
@@ -535,12 +557,13 @@ def fit():
     error_min = copy.deepcopy(error)
     W_min = copy.deepcopy(W)
     joint_min = copy.deepcopy(joint)
-    error_ep = {"epoch":[],"error_train":[], "error_val":[]}
+    error_ep = {"epoch":[],"error_train":[], "error_val":[], "ep_time":[]}
     error_ep['epoch'].append(0)
     error_ep['error_train'].append(error[0])
     error_ep['error_val'].append(error[1])
     
     time_min = (time() -  WOMC.start_time) / 60
+    error_ep['ep_time'].append(time_min)
     print(f'Time: {time_min:.2f} | Epoch 0 / {WOMC.epoch_w} - start Validation error: {error[1]:.4f}')
     for ep in range(1,WOMC.epoch_w+1):
         error, W, joint, joint_shape, Wtrain, Wval = check_neighboors(W,joint,joint_shape, ep)
@@ -570,6 +593,7 @@ def fit():
         error_ep['error_train'].append(error[0])
         error_ep['error_val'].append(error[1])
         time_min = (time() -  WOMC.start_time) / 60
+        error_ep['ep_time'].append(time_min)
         print(f'Time: {time_min:.2f} | Epoch {ep} / {WOMC.epoch_w} - Validation error: {error[1]:.4f} | Min-Epoch {ep_min}')
         if (ep-ep_min)>WOMC.early_stop_round_w :
             print('End by Early Stop Round')
@@ -589,7 +613,7 @@ def fit():
     time_min = (end_time -  WOMC.start_time) / 60
     print(f'Total Time: {time_min:.2f} minutes| Min-Epoch {ep_min} - Train error: {error_train:.4f} / Validation error: {error_val:.4f} / Test error: {error_test:.4f}')
 
-    save_window(joint,joint_shape, W)
+    save_window(joint_min,joint_shape_min, W_min)
     save_results_complet(Wtrain_min, Wval_min, Wtest)
     pickle.dump(WOMC.w_hist, open(f'{work_output}/{WOMC.path_results}/W_hist{WOMC.name_save}.txt', 'wb'))
     pickle.dump(error_ep, open(f'{work_output}/{WOMC.path_results}/error_ep_w{WOMC.name_save}.txt', 'wb'))

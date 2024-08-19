@@ -41,16 +41,33 @@ class WOMC_load_images:
             #setattr(self, f'y{img_type}', np.where(np.array(y_data) == 0, -1, y_data))
             setattr(self, f'y{img_type}', y_data)
         elif img_type.startswith('GoL'):
+          if img_type.endswith('_sp'):
+            img_type = img_type[:-3]
+            flg_sp = 1
+          elif img_type.endswith('_sp1'):
+            img_type = img_type[:-4]
+            flg_sp = 2
+          elif img_type.endswith('_sp2'):
+            img_type = img_type[:-4]
+            flg_sp = 3
+          elif img_type.endswith('_sp3'):
+            img_type = img_type[:-4]
+            flg_sp = 4
+          elif img_type.endswith('_sp4'):
+            img_type = img_type[:-4]
+            flg_sp = 5
+          else:
+             flg_sp = 0
           path = f'data/{img_type}'
           start = 0
           self.train = self.load_data(start, train_size, path)
-          self.ytrain = self.load_labels(start, train_size, path)
+          self.ytrain = self.load_labels(start, train_size, path, flg_sp)
 
           self.val = self.load_data(start+train_size, train_size + val_size, path)
-          self.yval = self.load_labels(start+train_size, train_size + val_size, path)
+          self.yval = self.load_labels(start+train_size, train_size + val_size, path,flg_sp)
 
           self.test = self.load_data(start+train_size + val_size, train_size + val_size + test_size, path)
-          self.ytest = self.load_labels(start+train_size + val_size, train_size + val_size + test_size, path)
+          self.ytest = self.load_labels(start+train_size + val_size, train_size + val_size + test_size, path,flg_sp)
         elif img_type.startswith('mnist'):
           digito = int(img_type[-1])
           self.train,self.ytrain,self.val, self.yval,self.test, self.ytest =self.transform_mnist_digit(digito, train_size, val_size, test_size)
@@ -114,10 +131,22 @@ class WOMC_load_images:
         return jnp.array(data_list)
 
     # Função para carregar os rótulos
-    def load_labels(self, start_idx, end_idx, path):
+    def load_labels(self, start_idx, end_idx, path,flg_sp):
+        if flg_sp==1:
+            img_name = 'y_sp_'
+        elif flg_sp==2:
+            img_name = 'y_sp1_'
+        elif flg_sp==3:
+            img_name = 'y_sp2_'
+        elif flg_sp==4:
+            img_name = 'y_sp3_'
+        elif flg_sp==5:
+            img_name = 'y_sp4_'
+        else:
+            img_name = 'y_'
         label_list = []
         for i in range(start_idx, end_idx):
-            file_path = os.path.join(path, f'y_{i}.csv')
+            file_path = os.path.join(path, f'{img_name}{i}.csv')
             labels = pd.read_csv(file_path, header=0).values  # Ignora a primeira linha
             label_list.append(jnp.array(labels, dtype=jnp.int8))
         return jnp.array(label_list)
@@ -136,7 +165,8 @@ class WOMC_load_images:
         #test_non_dig_idx = np.where(y_test != digito)[0]
 
         # Garantir pelo menos metade das imagens com valor digito
-        num_train_zeros = (train_size+val_size+test_size)//2
+        num_train_zeros = (train_size+val_size+test_size)//3
+        #num_train_zeros = (train_size+val_size+test_size)//2
         #num_test_zeros = (val_size+test_size)//2
 
         train_selected_zeros_idx = np.random.choice(train_dig_idx, num_train_zeros, replace=False)

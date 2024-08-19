@@ -21,6 +21,7 @@ USDMM_class.WOMC_DATA(
     train_size = 10, # INT -> Number of images to train
     val_size = 10, # INT -> Number of images to validate
     test_size = 10, # INT -> Number of images to test
+    img_type = 'img_n', #STR ->'img_n' / 'gl' / 'classification' / 'GoL' / 'mnist{i}'
     error_type = 'iou', # 'mae' / 'iou' -> type of error
     neighbors_sample_f = 8, # INT/False -> Number of neighbors to sort
     neighbors_sample_w = 5, # INT/False -> Number of neighbors to sort
@@ -55,10 +56,14 @@ def run_experiments(base_config, results_dir, run):
     min_train_errors = []
     min_val_errors = []
     min_test_errors = []
+    min_epoch = []
+    time_to_min_epoch = []
 
     all_results = []
 
-    for seed in range(7):  # Rodar 10 vezes com diferentes seeds
+    for seed in range(10):  # Rodar 10 vezes com diferentes seeds
+        print('****')
+        print(f'Start run {run}.{seed}')
         config['seed'] = seed
         config['path_results'] = f'results_run{run}_V{seed}'
         result, total_time, min_train_error, min_val_error, min_test_error = run_training(config, seed)
@@ -66,8 +71,14 @@ def run_experiments(base_config, results_dir, run):
         result_df['seed'] = seed
         result_df['path_results'] =  f'results_run{run}_V{seed}'
         result_df['time'] = total_time
+        result_df['min_test_error'] = min_test_error
         all_results.append(result_df)
 
+        min_error_val_epoch = result_df.loc[result_df['error_val'].idxmin()]
+
+        min_error_val_epoch
+        min_epoch.append(min_error_val_epoch['epoch'])
+        time_to_min_epoch.append(min_error_val_epoch['ep_time'])
         total_times.append(total_time)
         min_train_errors.append(min_train_error)
         min_val_errors.append(min_val_error)
@@ -91,7 +102,11 @@ def run_experiments(base_config, results_dir, run):
         'min_val_error_std': np.std(min_val_errors),
         'min_test_error_mean': np.mean(min_test_errors),
         'min_test_error_median': np.median(min_test_errors),
-        'min_test_error_std': np.std(min_test_errors)
+        'min_test_error_std': np.std(min_test_errors),
+        'ep_min_mean': np.mean(min_epoch),
+        'ep_min_std': np.std(min_epoch),
+        'time_to_ep_min_mean': np.mean(time_to_min_epoch),
+        'time_to_ep_min_std': np.std(time_to_min_epoch)
     })
 
     summary_df = pd.DataFrame(summary_results)
@@ -118,6 +133,7 @@ def main():
         'train_size': 10,
         'val_size': 10,
         'test_size': 10,
+        'img_type': 'img_n',
         'error_type': 'iou',
         'neighbors_sample_f': 8,
         'neighbors_sample_w': 5,

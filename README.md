@@ -1,5 +1,5 @@
 
-# USDMM - Unrestricted Sequential Discrete Morphological Neural Networks
+# USDMNN - Unrestricted Sequential Discrete Morphological Neural Networks
 
 
 [![Python Version](https://img.shields.io/badge/python-3.8-brightgreen.svg)](https://www.python.org/downloads/)
@@ -17,53 +17,90 @@ Train Unrestricted Sequential Discrete Morphological Neural Networks via the sto
 
 ## Dependencies
 
-numpy==1.20.1
-more-itertools==8.7.0
-opencv-python==4.5.3.56
+- Docker
+- ROCm-enabled GPU and drivers
 
 ## Usage
 
-* It's possible to import the USDMM like bellow:
-  ```python
-  import USDMM
+### Docker Setup
 
-  WOMC = USDMM.WOMC(
-    new = True, # True/ STR -> If True inicialize with the cross operator/ If STR it will opens the file with the name passed
-    nlayer = 2, # INT -> Number of operators in each layer
-    wlen = 3,  # INT -> Size of the operator (wlen*wlen)
-    train_size = 30, # INT -> Number of images to train 
-    val_size = 10, # INT -> Number of images to validate
-    test_size = 10, # INT -> Number of images to test
-    error_type = 'iou', # 'mae' / 'iou' -> type of error
-    neighbors_sample = 10, # INT/False -> Number of neighbors to sort
-    epoch_f = 500, # INT -> Number of epochs for the boolean function lattice (fixed windows)
-    epoch_w = 50, # INT -> Number of epochs for the windows lattice
-    batch = 1, # INT -> Batch size
-    path_results = 'results_V1', # STR -> file where we want to save the results
-    name_save='_V1', # STR -> pos fixed name for the results saved
-    seed = 0, #INT -> seed for reproducibilit
-    parallel = True, # True/False -> use parallel (True) or sequential (False)
-    early_stop_round_f = 50, #INT -> max number of epochs without changes in the boolean function lattice
-    early_stop_round_w = 10 #INT -> max number of epochs without changes in the windows lattice
-  )
-  WOMC.fit()
-  ```
-* All input images must be in **./data/x** and output images in **./data/y** folder with names **trainxx.jpg** (where xx is the sequential number (01, 02, 03,....)) for the train dataset, **valxx.jpg** for the validation dataset and **testxx.jpg** for the test dataset.
-* At the end of the fit method, inside the folder passe in the inicialization **path_results** will be the saved all the results. Inside the archives "W_**name_save**.txt" and "joint_**name_save**.txt"  will be the window e joint learned.
-* It's possible start the learning once again from the latest learned window by sending it pos fixes name (**name_save**) name in the variable new
+This repository includes a `Dockerfile` that sets up the environment necessary to run your experiments. You can choose which experiment to run by uncommenting the appropriate `ENTRYPOINT` in the `Dockerfile`.
+
+#### Available ENTRYPOINT Options:
+
+- `main.py`: Runs a single experiment. Make sure to configure the `base_config` inside this file to execute the experiment correctly.
+- `test_digits.py`: Runs experiments for edge recognition of noisy digits.
+- `test_gol.py`: Trains the transition function for the Game of Life.
+- `test_mnist.py`: Runs experiments for digit classification using the MNIST dataset.
+
+#### Running Experiments:
+
+After configuring the ENTRYPOINT, you can further customize your experiments by editing the **PARAM_LIST** in the *run_tests.sh* script.
+Content of the **PARAM_LIST**:
+* nlayer: INT - Number of operators in each layer
+* wlen: INT - Size of the operator (wlen*wlen)
+* train_size: INT - Number of images to train
+* val_size: INT - Number of images to validate
+* neighbors_sample_f: INT - Number of neighbors to sort in the boolean function lattice
+* neighbors_sample_w: INT - Number of neighbors to sort in the windows lattice
+* epoch_f: INT - Number of epochs for the boolean function lattice (fixed windows)
+* epoch_w: INT - Number of epochs for the windows lattice
+* es_f: INT - Max number of epochs without changes in the boolean function lattice
+* es_w: INT - Max number of epochs without changes in the windows lattice
+* batch: INT - Batch size
+* w_ini: STR - Initial operator
+* run: INT - Run number for saving results
+
+After configuring correctly all the **PARAM_LIST** you should:
+
+1. Make the script executable:
+
+   ```bash
+   chmod +x run_tests.sh
+   ```
+
+2. Run the experiments:
+
+   ```bash
+   ./run_tests.sh
+   ```
 
 
 ## Features
 
-* **fit()** -> train the USDMM 
+* **Modular Experiment Setup:** Easily switch between different experiments by changing the ENTRYPOINT in the Dockerfile.
+* **Parameter Customization:** Fine-tune your experiments using the run_tests.sh script.
+* **Output Management:** All outputs are stored in the /app/output directory within the container.
 
-* **results_after_fit** -> open de  "W_**name_save**.txt" and "joint_**name_save**.txt" archives and generate the images
+## Examples
 
-* **test()** -> find error for a fixed window for testing
+### Running an MNIST Classification Experiment
+
+1. Uncomment the following line in the `Dockerfile`:
+
+   ```Dockerfile
+   ENTRYPOINT ["python3", "/app/test_mnist.py"]
+   ```
+
+2. Configure your **PARAM_LIST**
+  
+    ```Python
+    PARAMS_LIST=(
+      --nlayer 7 --wlen 5 --train_size 100 --val_size 100 --neighbors_sample_f 10 --neighbors_sample_w 20 --epoch_f 500 --epoch_w 30 --es_f 100 --es_w 10 --batch 50 --w_ini '[0,0,0,0,0,0,0,1,0,0,0,1,1,1,0,0,0,1,0,0,0,0,0,0,0]' --run 1
+      --nlayer 7 --wlen 5 --train_size 100 --val_size 500 --neighbors_sample_f 10 --neighbors_sample_w 20 --epoch_f 500 --epoch_w 30 --es_f 100 --es_w 10 --batch 50 --w_ini '[0,0,0,0,0,0,0,1,0,0,0,1,1,1,0,0,0,1,0,0,0,0,0,0,0]' --run 2
+    )
+    ```
+
+3. Build and run the Docker container:
+   ```bash
+   chmod +x run_tests.sh
+   ./run_tests.sh
+   ```
 
 ## Contributing
 
 Author: Mariana Feldman
+
 Maintainer: Mariana Feldman <mariana.feldman@ime.usp.br>
 
 ## Reference

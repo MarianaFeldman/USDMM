@@ -63,8 +63,7 @@ def run_experiments(base_config, results_dir, run):
     all_results = []
     all_results_fixed =[]
 
-    #for img_type in ['GoL_final', 'GoL_final_sp', 'GoL_final_sp1','GoL_final_sp2','GoL_final_sp3', 'GoL_final_sp4']:
-    for img_type in ['GoL_final_sp4']:
+    for img_type in ['GoL_final', 'GoL_final_sp', 'GoL_final_sp1','GoL_final_sp2','GoL_final_sp3', 'GoL_final_sp4']:
         config['img_type'] = img_type
         print(f'Running with images {img_type}')
         for seed in range(10):  # Rodar 10 vezes com diferentes seeds
@@ -147,8 +146,8 @@ def run_experiments(base_config, results_dir, run):
             USDMM_class.WOMC_DATA(
                 nlayer = 1, # INT -> Number of operators in each layer
                 wlen = 3,  # INT -> Size of the operator (wlen*wlen)
-                train_size = 100, # INT -> Number of images to train
-                val_size = 100, # INT -> Number of images to validate
+                train_size = base_config['train_size'], # INT -> Number of images to train
+                val_size = base_config['val_size'], # INT -> Number of images to validate
                 test_size = 100, # INT -> Number of images to test
                 img_type = img_type,#'GoL_final', #STR ->'img_n' / 'gl' / 'classification' / 'GoL'
                 error_type = 'mae', # 'mae' / 'iou' -> type of error
@@ -165,9 +164,6 @@ def run_experiments(base_config, results_dir, run):
                 w_ini = [1, 1, 1, 1, 1, 1, 1, 1, 1], #[0,0,0,0,0,0,0,1,0,0,0,1,1,1,0,0,0,1,0,0,0,0,0,0,0],#[0, 1, 0, 1, 1, 1, 0, 1, 0], #inicial operator
             )
             importlib.reload(USDMM)
-            
-            #USDMM.WOMC.seed = seed
-            #USDMM.WOMC.path_results = path_results
             
             joint,joint_shape = USDMM.create_joint(W_ideal)
             error_ep_f, error, joint_new, total_time, epoch_min, ep = USDMM.get_error_fixed_window(W_ideal, joint, joint_shape, False)
@@ -289,10 +285,13 @@ def main():
     parser.add_argument('--nlayer', type=int, required=True, help='number of layers')
     parser.add_argument('--wlen', type=int, required=True, help='Size of W operator')
     parser.add_argument('--train_size', type=int, required=True, help='Training size')
+    parser.add_argument('--val_size', type=int, required=True, help='Validation size')
     parser.add_argument('--neighbors_sample_f', type=int, required=True, help='Neighbors sample factor - function')
     parser.add_argument('--neighbors_sample_w', type=int, required=True, help='Neighbors sample factor - window')
     parser.add_argument('--epoch_f', type=int, required=True, help='number of epochs - function')
     parser.add_argument('--epoch_w', type=int, required=True, help='number of epochs - window')
+    parser.add_argument('--es_f', type=int, required=True, help='early stop - function')
+    parser.add_argument('--es_w', type=int, required=True, help='early stop - window')
     parser.add_argument('--batch', type=int, required=True, help='Batch size')
     parser.add_argument('--w_ini', type=str, required=True, help='Training size')
     parser.add_argument('--run', type=int, required=True, help='Run number')
@@ -307,10 +306,13 @@ def main():
     base_config['nlayer'] = args.nlayer
     base_config['wlen'] = args.wlen
     base_config['train_size'] = args.train_size
+    base_config['val_size'] = args.val_size
     base_config['neighbors_sample_f'] = args.neighbors_sample_f
     base_config['neighbors_sample_w'] = args.neighbors_sample_w
     base_config['epoch_f'] = args.epoch_f
     base_config['epoch_w'] = args.epoch_w
+    base_config['early_stop_round_f'] = args.es_f
+    base_config['early_stop_round_w'] = args.es_w
     base_config['batch'] = args.batch
     base_config['w_ini'] = str_to_jax_array(args.w_ini)
     run_experiments(base_config, results_dir, args.run)

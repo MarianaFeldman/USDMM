@@ -41,10 +41,10 @@ USDMM_class.WOMC_DATA(
 
 import USDMM_JAX_C as USDMM
 
-def run_training(config, W):
+def run_training(config):
     model = USDMM_class.WOMC_DATA(**config)
     importlib.reload(USDMM)
-    return USDMM.fit(W)
+    return USDMM.fit()
 
 def run_experiments(base_config, results_dir, run):
     
@@ -56,16 +56,10 @@ def run_experiments(base_config, results_dir, run):
 
 
     for digito in [1]:#range(10):  # Rodar 10 vezes com diferentes seeds
-        path_old_run = 'results_run63_d1'
-        WOMC_WINDOW = USDMM_data.load_window(
-            path_window = f'/{work_directory}/output/{path_old_run}/run/W_V1_ep8.txt',
-            path_joint = f'/{work_directory}/output/{path_old_run}/run/joint_V1_ep8.txt',
-            path_joint_shape = f'/{work_directory}/output/{path_old_run}/run/joint_shape_V1_ep8.txt'
-        )
         path_result = f'results_run{run}_d{digito}'
         config['img_type'] = f'mnist{digito}'
         config['path_results'] = path_result
-        result, total_time, min_train_error, min_val_error, min_test_error = run_training(config, WOMC_WINDOW.W)
+        result, total_time, min_train_error, min_val_error, min_test_error = run_training(config)
         result_df = pd.DataFrame(result)
         result_df['digito'] = digito
         result_df['path_results'] =  path_result
@@ -94,28 +88,22 @@ def run_experiments(base_config, results_dir, run):
         W_hood_total = None
         total_error = 0
 
-        # Executando a função em 4 partes
         for i in range(4):
             start_idx = i * 2500
             end_idx = (i + 1) * 2500
-
-            # Executa a função na parte atual
             W_hood_part, w_error_fixed_part = USDMM.run_window_convolve_jit(
                 WOMC_IMG.jax_test[start_idx:end_idx],
                 WOMC_IMG.jax_ytest[start_idx:end_idx],
                 W_matrices,
                 bias
             )
-
-            # Agregando os resultados
             if W_hood_total is None:
                 W_hood_total = W_hood_part
             else:
                 W_hood_total = jnp.concatenate((W_hood_total, W_hood_part), axis=0)
             
-            total_error += w_error_fixed_part * (end_idx - start_idx)  # Somando o erro ponderado pelo número de elementos
+            total_error += w_error_fixed_part * (end_idx - start_idx) 
 
-        # Calculando o erro médio total (MAE)
         total_error /= WOMC_IMG.jax_test.shape[0]
         
        
@@ -136,11 +124,7 @@ def run_experiments(base_config, results_dir, run):
         plt.xlabel('Predicted Label')
         plt.ylabel('True Label')
         plt.title('Confusion Matrix')
-
-        # Salvando o gráfico como uma imagem
         plt.savefig(f'/{results_dir}/confusion_matrix_run{run}_d{digito}.png')
-
-        # Exibindo o gráfico
         plt.show()
 
         print('Learning with Fixed Window')
@@ -167,7 +151,6 @@ def run_experiments(base_config, results_dir, run):
         importlib.reload(USDMM)
         #joint,joint_shape = USDMM.create_joint(WOMC_WINDOW.W)
         error_ep_f, error, joint_new, total_time, epoch_min, ep = USDMM.get_error_fixed_window(WOMC_WINDOW.W, WOMC_WINDOW.joint, WOMC_WINDOW.joint_shape, False)
-        #diff = jnp.where(joint_new != joit_ideal)[1].shape[0]
         USDMM.save_window_fixed(joint_new,WOMC_WINDOW.joint_shape, WOMC_WINDOW.W)
         result_df_fixed = pd.DataFrame(error_ep_f)
 
@@ -184,28 +167,21 @@ def run_experiments(base_config, results_dir, run):
         W_hood_total = None
         total_error = 0
 
-        # Executando a função em 4 partes
         for i in range(4):
             start_idx = i * 2500
             end_idx = (i + 1) * 2500
-
-            # Executa a função na parte atual
             W_hood_part, w_error_fixed_part = USDMM.run_window_convolve_jit(
                 WOMC_IMG.jax_test[start_idx:end_idx],
                 WOMC_IMG.jax_ytest[start_idx:end_idx],
                 W_matrices,
                 bias
             )
-
-            # Agregando os resultados
             if W_hood_total is None:
                 W_hood_total = W_hood_part
             else:
                 W_hood_total = jnp.concatenate((W_hood_total, W_hood_part), axis=0)
             
-            total_error += w_error_fixed_part * (end_idx - start_idx)  # Somando o erro ponderado pelo número de elementos
-
-        # Calculando o erro médio total (MAE)
+            total_error += w_error_fixed_part * (end_idx - start_idx)  
         total_error /= WOMC_IMG.jax_test.shape[0]
 
         # Resultados finais
@@ -217,13 +193,7 @@ def run_experiments(base_config, results_dir, run):
 
         result_df_fixed['Test_complet_error'] = total_error
         result_df_fixed.to_csv(f"{results_dir}/{path_result}_fixed.csv", index=False)
-        #all_results.append(result_df)
 
-        #total_times.append(total_time)
-        #min_train_errors.append(min_train_error)
-        #min_val_errors.append(min_val_error)
-        #min_test_errors.append(min_test_error)
-        #result_df.to_csv(f"{results_dir}/{path_result}.csv", index=False)
         conf_matrix = confusion_matrix(WOMC_IMG.jax_ytest, y_pred, normalize='true')
         print('Matriz de Confusão:')
         print(conf_matrix)
@@ -236,15 +206,8 @@ def run_experiments(base_config, results_dir, run):
         plt.xlabel('Predicted Label')
         plt.ylabel('True Label')
         plt.title('Confusion Matrix')
-
-        # Salvando o gráfico como uma imagem
         plt.savefig(f'/{results_dir}/confusion_matrix_run{run}_d{digito}_fixed.png')
-
-        # Exibindo o gráfico
         plt.show()
-
-    #combined_results = pd.concat(all_results)
-    #combined_results.to_csv(f"/{results_dir}/results_run{run}.csv", index=False)
 
     
 
@@ -288,10 +251,13 @@ def main():
     parser.add_argument('--nlayer', type=int, required=True, help='number of layers')
     parser.add_argument('--wlen', type=int, required=True, help='Size of W operator')
     parser.add_argument('--train_size', type=int, required=True, help='Training size')
+    parser.add_argument('--val_size', type=int, required=True, help='Validation size')
     parser.add_argument('--neighbors_sample_f', type=int, required=True, help='Neighbors sample factor - function')
     parser.add_argument('--neighbors_sample_w', type=int, required=True, help='Neighbors sample factor - window')
     parser.add_argument('--epoch_f', type=int, required=True, help='number of epochs - function')
     parser.add_argument('--epoch_w', type=int, required=True, help='number of epochs - window')
+    parser.add_argument('--es_f', type=int, required=True, help='early stop - function')
+    parser.add_argument('--es_w', type=int, required=True, help='early stop - window')
     parser.add_argument('--batch', type=int, required=True, help='Batch size')
     parser.add_argument('--w_ini', type=str, required=True, help='Training size')
     parser.add_argument('--run', type=int, required=True, help='Run number')
@@ -306,13 +272,17 @@ def main():
     base_config['nlayer'] = args.nlayer
     base_config['wlen'] = args.wlen
     base_config['train_size'] = args.train_size
+    base_config['val_size'] = args.val_size
     base_config['neighbors_sample_f'] = args.neighbors_sample_f
     base_config['neighbors_sample_w'] = args.neighbors_sample_w
     base_config['epoch_f'] = args.epoch_f
     base_config['epoch_w'] = args.epoch_w
+    base_config['early_stop_round_f'] = args.es_f
+    base_config['early_stop_round_w'] = args.es_w
     base_config['batch'] = args.batch
     base_config['w_ini'] = str_to_jax_array(args.w_ini)
     run_experiments(base_config, results_dir, args.run)
+
 
     # Parâmetros a serem testados
     #param_configs = {
